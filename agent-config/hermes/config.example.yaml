@@ -1,0 +1,54 @@
+# Reusable Hermes runtime settings for this project. Copy required values into
+# ~/.hermes/config.yaml and replace the repository path. MCP endpoints are kept
+# separately because local simulations and production services use different
+# transports and trust boundaries.
+#
+# provider: "custom" is Hermes' setting for any OpenAI-compatible endpoint
+# (OVMS, vLLM, llama.cpp, Ollama). OVMS runs without auth, so api_key is a
+# non-empty placeholder only to satisfy the OpenAI client.
+#
+# context_length note: current Hermes requires a >=64000-token window, while
+# this OVMS build serves Qwen3-8B at 40960. We declare 64000 so Hermes starts;
+# OVMS still accepts real requests because QSR prompts stay well under 40960.
+# Keep max_tokens small so prompt+output never exceeds the model's true 40960.
+model:
+  default: OpenVINO/Qwen3-8B-int4-ov
+  provider: custom
+  base_url: http://127.0.0.1:4444/v3
+  api_key: "local-ovms-no-auth"
+  context_length: 64000
+  # Keep outputs short: on an 8B model, generation time scales with tokens
+  # emitted, and long tool-driven answers dominate operator latency.
+  max_tokens: 1536
+  # Stream tokens so the operator UI can render the answer as it is generated
+  # instead of waiting for the whole turn. The UI reads hermes -z line by line.
+  streaming: true
+
+# Per-endpoint overrides for the custom (OVMS) provider.
+# extra_body disables Qwen3's "thinking" mode: otherwise every turn generates a
+# long hidden reasoning block, making agent responses take minutes. Hermes
+# forwards extra_body to the OpenAI-compatible endpoint (OVMS) per request.
+providers:
+  custom:
+    base_url: http://127.0.0.1:4444/v3
+    request_timeout_seconds: 1800
+    stale_timeout_seconds: 1800
+    extra_body:
+      chat_template_kwargs:
+        enable_thinking: false
+
+agent:
+  max_turns: 500
+  run_budget_seconds: 1800
+  tool_use_enforcement: "true"
+  session_stall_timeout: 900
+  # Fewer planning tokens per turn; the local 8B model is latency-bound.
+  reasoning_effort: low
+
+tools:
+  tool_search:
+    enabled: false
+
+skills:
+  external_dirs:
+    - /absolute/path/to/qsr-agentic-svc/qsr-skills
