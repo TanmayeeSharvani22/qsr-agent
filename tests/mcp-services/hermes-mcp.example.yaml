@@ -1,0 +1,20 @@
+# Test-only Hermes registrations for the simulated MCP services. Merge this
+# block into ~/.hermes/config.yaml and replace the repository path.
+# The servers import mcp-service-sdk, so they are launched with the SDK venv
+# interpreter (.venv/mcp), created by scripts/setup.sh.
+platform_toolsets:
+  cli:
+    - kiosk
+    - order-accuracy
+
+mcp_servers:
+  kiosk:
+    command: /absolute/path/to/qsr-agentic-svc/.venv/mcp/bin/python
+    args:
+      - /absolute/path/to/qsr-agentic-svc/tests/mcp-services/kiosk_server.py
+    enabled: true
+  order-accuracy:
+    command: /absolute/path/to/qsr-agentic-svc/.venv/mcp/bin/python
+    args:
+      - /absolute/path/to/qsr-agentic-svc/tests/mcp-services/order_accuracy_server.py
+    enabled: true
