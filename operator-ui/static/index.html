@@ -95,6 +95,7 @@
     const count = document.getElementById('count');
     const status = document.getElementById('status');
     const refresh = document.getElementById('refresh');
+    const seenNotifications = new Set();
 
     async function loadServers() {
       services.innerHTML = '<li class="empty">Loading…</li>';
@@ -142,6 +143,26 @@
     refresh.onclick = () => { loadServers(); loadStatus(true); };
     loadServers();
     setInterval(() => loadStatus(false), 30000);
+
+    async function loadNotifications() {
+      try {
+        const res = await fetch('/notifications');
+        const data = await res.json();
+        (data.notifications || []).forEach(notification => {
+          const event = notification.event || {};
+          const id = event.ref_id || event.ts_ms;
+          if (seenNotifications.has(id)) return;
+          seenNotifications.add(id);
+          const payload = event.payload || {};
+          add('bot', 'CRITICAL food-safety alert: ' +
+            (payload.description || payload.event_name || 'Suspicious activity') +
+            ' | zone: ' + (payload.zone || 'unknown') +
+            ' | station: ' + (payload.station || 'unknown'), true);
+        });
+      } catch (err) { /* notification polling is best effort */ }
+    }
+    loadNotifications();
+    setInterval(loadNotifications, 2000);
 
     const SUGGESTIONS = [
       "List all suspicious-activity zones",

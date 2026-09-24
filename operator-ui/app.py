@@ -27,6 +27,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from collections import deque
 
 HOST = os.environ.get("QSR_UI_HOST", "0.0.0.0")
 PORT = int(os.environ.get("QSR_UI_PORT", "8600"))
@@ -37,8 +38,11 @@ HERMES_RESPONSE_STYLE = os.environ.get(
     "HERMES_RESPONSE_STYLE",
     "Use the relevant tool before answering factual or numeric questions. Do not estimate missing values. Answer in one short sentence unless the user explicitly asks for detail.",
 )
+HERMES_IDLE_DONE_SECONDS = float(os.environ.get("HERMES_IDLE_DONE_SECONDS", "3"))
 
 _INDEX_PATH = Path(__file__).parent / "static" / "index.html"
+_critical_notifications: deque[dict] = deque(maxlen=100)
+_critical_notifications_lock = threading.Lock()
 
 
 def _resolve_hermes() -> str | None:
@@ -203,6 +207,7 @@ def stream_hermes(question: str):
     threading.Thread(target=_pump_stdout, daemon=True).start()
     yield {"event": "start", "message": "Connecting to Hermes..."}
     got_output = False
+    last_output = time.monotonic()
     last_heartbeat = time.monotonic()
     try:
         while True:
@@ -210,6 +215,9 @@ def stream_hermes(question: str):
                 chunk = outbox.get(timeout=0.5)
             except queue.Empty:
                 now = time.monotonic()
+                if got_output and now - last_output >= HERMES_IDLE_DONE_SECONDS:
+                    proc.terminate()
+                    break
                 if now - last_heartbeat >= 1.0:
                     last_heartbeat = now
                     yield {"event": "heartbeat", "message": "Waiting for Hermes..."}
@@ -219,8 +227,13 @@ def stream_hermes(question: str):
             if chunk.get("event") == "eof":
                 break
             got_output = True
+            last_output = time.monotonic()
             yield chunk
-        proc.wait(timeout=5)
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait(timeout=5)
     except Exception as exc:  # noqa: BLE001 - surface any read/wait failure to the client
         proc.kill()
         yield {"event": "error", "error": str(exc)[:2000]}
@@ -255,10 +268,29 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/status" or self.path == "/status?force=1":
             body = json.dumps(check_status(force=self.path.endswith("force=1"))).encode("utf-8")
             self._send(200, body, "application/json")
+        elif self.path == "/notifications":
+            with _critical_notifications_lock:
+                notifications = list(_critical_notifications)
+            self._send(200, json.dumps({"ok": True, "notifications": notifications}).encode("utf-8"), "application/json")
         else:
             self._send(404, b"not found", "text/plain; charset=utf-8")
 
     def do_POST(self) -> None:  # noqa: N802
+        if self.path == "/notifications":
+            length = int(self.headers.get("Content-Length", "0") or "0")
+            raw = self.rfile.read(length) if length else b"{}"
+            try:
+                notification = json.loads(raw or b"{}")
+            except json.JSONDecodeError:
+                self._send(400, b'{"ok":false,"error":"invalid JSON"}', "application/json")
+                return
+            if not isinstance(notification, dict) or notification.get("type") != "critical_suspicious_activity":
+                self._send(400, b'{"ok":false,"error":"unsupported notification"}', "application/json")
+                return
+            with _critical_notifications_lock:
+                _critical_notifications.append(notification)
+            self._send(202, b'{"ok":true}', "application/json")
+            return
         if self.path not in ("/ask", "/ask/stream"):
             self._send(404, b'{"ok":false,"error":"not found"}', "application/json")
             return

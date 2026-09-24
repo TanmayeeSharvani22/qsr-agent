@@ -26,6 +26,11 @@ Map each request to the required capability below, then choose the compatible
 tool from `describe`. If no compatible tool is available, explain that the
 service contract does not support the request rather than guessing.
 
+Critical food-safety events are escalated automatically by the SAD pipeline
+after the event is persisted. The operator notification contains the event
+envelope and is delivered to the QSR operator UI; do not wait for a user query
+and do not attempt an MCP action because this service exposes no action tools.
+
 ## Capability Routing
 
 | User intent or question | Required capability | Fields to use | Answer rule |
@@ -48,6 +53,9 @@ together, and distinguish observed facts from recommendations. A single snapshot
 does not prove a historical trend unless multiple time points are returned.
 
 ## Notify Actions
+
+Automatic critical notification is not an agent action. It is emitted by the
+pipeline after `ServiceServer.emit` writes the event to durable storage.
 
 `notify_operator` surfaces an event to the store operator. It is automatic and
 rate-limited, but a diagnostic question never authorizes a notification.
