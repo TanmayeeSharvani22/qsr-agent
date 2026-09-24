@@ -64,8 +64,9 @@ Ask questions like "List all suspicious-activity zones" or "What is our order
 accuracy rate?" and the agent answers from live MCP services.
 
 Options: `START_UI` (default `true`), `QSR_UI_HOST` (default `0.0.0.0`),
-`QSR_UI_PORT` (default `8600`), and `QSR_MCP_SUBSCRIPTIONS` (JSON subscription
-list). When started by setup, logs go to `/tmp/qsr-operator-ui.log`. See
+`QSR_UI_PORT` (default `8600`), and `SUBSCRIBE_EVENTS_FILE` (default
+`agent-config/hermes/subscribe-events.yaml`). When started by setup, logs go to
+`/tmp/qsr-operator-ui.log`. See
 [Automatic event subscriptions](docs/setup.md#automatic-event-subscriptions)
 for same-machine Docker and distributed-machine examples.
 

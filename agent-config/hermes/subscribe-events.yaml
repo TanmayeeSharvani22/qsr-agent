@@ -1,0 +1,21 @@
+# Proactive MCP event subscriptions registered by the QSR Operator UI.
+# Add services here instead of changing operator-ui/app.py.
+#
+# Same-host Docker note: the MCP URL is reached from the host, while callbacks
+# originate in the service container. host.docker.internal therefore points the
+# callback back to the host-based Operator UI.
+subscriptions:
+  - name: suspicious-activity-critical
+    enabled: true
+    url: http://127.0.0.1:9000/mcp
+    event_type: report_suspicious_activity
+    condition: severity == critical
+    callback_url: http://host.docker.internal:8600/notifications
+
+  # Remote-service example:
+  # - name: kiosk-critical
+  #   enabled: true
+  #   url: https://kiosk.example.internal/mcp
+  #   event_type: kiosk_failure
+  #   condition: severity == critical
+  #   callback_url: https://qsr-agent.example.internal/notifications

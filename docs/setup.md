@@ -95,25 +95,25 @@ Keep the same overrides when later running `./scripts/setup.sh --check`.
 
 ### Automatic event subscriptions
 
-Set `QSR_MCP_SUBSCRIPTIONS` before setup to configure proactive event delivery
-to the Operator UI. It is a JSON array, so new services are added through
-configuration without changing `operator-ui/app.py`.
+Edit `agent-config/hermes/subscribe-events.yaml` to configure proactive event
+delivery to the Operator UI. Setup validates the enabled entries and loads them
+automatically, so adding a service does not require changing
+`operator-ui/app.py`.
 
 For SAD and QSR running on the same machine, with SAD in Docker and QSR on the
 host:
 
-```bash
-export QSR_MCP_SUBSCRIPTIONS='[
-  {
-    "url": "http://127.0.0.1:9000/mcp",
-    "event_type": "report_suspicious_activity",
-    "condition": "severity == critical",
-    "callback_url": "http://host.docker.internal:8600/notifications"
-  }
-]'
-
-START_UI=true WARM_UP_UI=false ./scripts/setup.sh
+```yaml
+subscriptions:
+  - name: suspicious-activity-critical
+    enabled: true
+    url: http://127.0.0.1:9000/mcp
+    event_type: report_suspicious_activity
+    condition: severity == critical
+    callback_url: http://host.docker.internal:8600/notifications
 ```
+
+Then run `START_UI=true WARM_UP_UI=false ./scripts/setup.sh`.
 
 Here, `url` is used by the host-based QSR UI to reach the published MCP port.
 The callback originates inside the SAD container, so it uses
@@ -127,16 +127,19 @@ extra_hosts:
 
 For separate machines, use routable addresses instead:
 
-```bash
-export QSR_MCP_SUBSCRIPTIONS='[
-  {
-    "url": "https://sad.example.internal/mcp",
-    "event_type": "report_suspicious_activity",
-    "condition": "severity == critical",
-    "callback_url": "https://qsr-agent.example.internal/notifications"
-  }
-]'
+```yaml
+subscriptions:
+  - name: suspicious-activity-critical
+    enabled: true
+    url: https://sad.example.internal/mcp
+    event_type: report_suspicious_activity
+    condition: severity == critical
+    callback_url: https://qsr-agent.example.internal/notifications
 ```
+
+Override `SUBSCRIBE_EVENTS_FILE` to use another YAML file. The
+`QSR_MCP_SUBSCRIPTIONS` JSON environment variable remains available as a
+higher-priority override for CI or generated deployments.
 
 The domain service must expose the SDK `subscribe` contract and use an SDK
 version that dispatches matching events after durable persistence. Restart the

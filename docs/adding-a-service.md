@@ -207,36 +207,33 @@ the `inventory` skill, calls the tool, and answers from its returned fields.
 ## 5. Add proactive event notifications (optional)
 
 Hermes handles conversational tool calls. The Operator UI is the persistent MCP
-subscription client used for automatic alerts. Configure subscriptions before
-running `scripts/setup.sh`:
+subscription client used for automatic alerts. Add an enabled entry to
+`agent-config/hermes/subscribe-events.yaml`:
 
-```bash
-export QSR_MCP_SUBSCRIPTIONS='[
-  {
-    "url": "https://inventory.example.internal/mcp",
-    "event_type": "inventory_alert",
-    "condition": "severity == critical",
-    "callback_url": "https://qsr-agent.example.internal/notifications"
-  }
-]'
-
-START_UI=true WARM_UP_UI=false ./scripts/setup.sh
+```yaml
+subscriptions:
+  - name: inventory-critical
+    enabled: true
+    url: https://inventory.example.internal/mcp
+    event_type: inventory_alert
+    condition: severity == critical
+    callback_url: https://qsr-agent.example.internal/notifications
 ```
 
-Add more objects to the JSON array for additional applications; no
-`operator-ui/app.py` change is required.
+Run `START_UI=true WARM_UP_UI=false ./scripts/setup.sh` after editing the file.
+Add more list entries for additional applications; no `operator-ui/app.py`
+change is required.
 
 For a service in Docker on the same host as the QSR UI:
 
-```bash
-export QSR_MCP_SUBSCRIPTIONS='[
-  {
-    "url": "http://127.0.0.1:9100/mcp",
-    "event_type": "inventory_alert",
-    "condition": "severity == critical",
-    "callback_url": "http://host.docker.internal:8600/notifications"
-  }
-]'
+```yaml
+subscriptions:
+  - name: inventory-critical
+    enabled: true
+    url: http://127.0.0.1:9100/mcp
+    event_type: inventory_alert
+    condition: severity == critical
+    callback_url: http://host.docker.internal:8600/notifications
 ```
 
 On Linux, add this to the event-producing service's Compose definition so its

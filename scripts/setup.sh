@@ -43,8 +43,10 @@ WARM_UP_UI=${WARM_UP_UI:-false}
 # restrict to loopback.
 QSR_UI_HOST=${QSR_UI_HOST:-0.0.0.0}
 QSR_UI_PORT=${QSR_UI_PORT:-8600}
-# JSON array of generic MCP subscriptions registered by the operator UI.
-QSR_MCP_SUBSCRIPTIONS=${QSR_MCP_SUBSCRIPTIONS:-[]}
+# YAML is the normal subscription source. QSR_MCP_SUBSCRIPTIONS remains an
+# optional JSON override for CI and generated deployments.
+SUBSCRIBE_EVENTS_FILE=${SUBSCRIBE_EVENTS_FILE:-"$ROOT_DIR/agent-config/hermes/subscribe-events.yaml"}
+QSR_MCP_SUBSCRIPTIONS=${QSR_MCP_SUBSCRIPTIONS:-}
 # Registrations are convention-based, not per-service code: each QSR sim is a
 # tests/mcp-services/<name>_server.py (auto-discovered), and real apps register
 # themselves via their own launch. This script never changes to add a service.
@@ -96,7 +98,8 @@ Optional environment variables:
     WARM_UP_UI          Run one warm-up UI chat request during setup (default false)
     QSR_UI_HOST         Operator UI bind host (default 0.0.0.0)
     QSR_UI_PORT         Operator UI bind port (default 8600)
-    QSR_MCP_SUBSCRIPTIONS  JSON list of MCP event subscriptions (default [])
+    SUBSCRIBE_EVENTS_FILE  Event subscription YAML path
+    QSR_MCP_SUBSCRIPTIONS  Optional JSON override for event subscriptions
 EOF
 }
 
@@ -260,6 +263,53 @@ setup_python() {
     else
         "$SETUP_PYTHON" "$@"
     fi
+}
+
+load_event_subscriptions() {
+    if [[ -n "$QSR_MCP_SUBSCRIPTIONS" ]]; then
+        log "Using QSR_MCP_SUBSCRIPTIONS environment override"
+        return
+    fi
+    if [[ ! -f "$SUBSCRIBE_EVENTS_FILE" ]]; then
+        QSR_MCP_SUBSCRIPTIONS='[]'
+        log "No event subscription file at $SUBSCRIBE_EVENTS_FILE; automatic alerts disabled"
+        return
+    fi
+
+    QSR_MCP_SUBSCRIPTIONS=$(SUBSCRIBE_EVENTS_FILE="$SUBSCRIBE_EVENTS_FILE" setup_python - <<'PY'
+import json
+import os
+from pathlib import Path
+
+import yaml
+
+path = Path(os.environ["SUBSCRIBE_EVENTS_FILE"])
+document = yaml.safe_load(path.read_text()) or {}
+subscriptions = document.get("subscriptions", [])
+if not isinstance(subscriptions, list):
+    raise SystemExit(f"{path}: 'subscriptions' must be a list")
+
+required = {"url", "event_type", "callback_url"}
+enabled = []
+for index, subscription in enumerate(subscriptions):
+    if not isinstance(subscription, dict):
+        raise SystemExit(f"{path}: subscription {index} must be a mapping")
+    if not subscription.get("enabled", True):
+        continue
+    missing = sorted(required - subscription.keys())
+    if missing:
+        raise SystemExit(f"{path}: subscription {index} missing {', '.join(missing)}")
+    enabled.append({
+        "url": str(subscription["url"]),
+        "event_type": str(subscription["event_type"]),
+        "condition": str(subscription.get("condition", "*")),
+        "callback_url": str(subscription["callback_url"]),
+    })
+
+print(json.dumps(enabled, separators=(",", ":")))
+PY
+    ) || fail "Could not load event subscriptions from $SUBSCRIBE_EVENTS_FILE"
+    log "Loaded event subscriptions from $SUBSCRIBE_EVENTS_FILE"
 }
 
 install_hermes() {
@@ -616,6 +666,7 @@ main() {
     fi
     validate_stack
     if [[ $CHECK_ONLY == false ]]; then
+        load_event_subscriptions
         start_operator_ui
         warm_up_operator_ui
     fi
