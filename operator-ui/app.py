@@ -50,6 +50,7 @@ except json.JSONDecodeError:
 _INDEX_PATH = Path(__file__).parent / "static" / "index.html"
 _critical_notifications: deque[dict] = deque(maxlen=100)
 _critical_notifications_lock = threading.Lock()
+_notification_clients: set[queue.Queue[dict]] = set()
 
 
 def _resolve_hermes() -> str | None:
@@ -349,6 +350,8 @@ class Handler(BaseHTTPRequestHandler):
             with _critical_notifications_lock:
                 notifications = list(_critical_notifications)
             self._send(200, json.dumps({"ok": True, "notifications": notifications}).encode("utf-8"), "application/json")
+        elif self.path == "/notifications/stream":
+            self._stream_notifications()
         else:
             self._send(404, b"not found", "text/plain; charset=utf-8")
 
@@ -368,6 +371,9 @@ class Handler(BaseHTTPRequestHandler):
                 return
             with _critical_notifications_lock:
                 _critical_notifications.append(notification)
+                clients = list(_notification_clients)
+            for client in clients:
+                client.put(notification)
             self._send(202, b'{"ok":true}', "application/json")
             return
         if self.path not in ("/ask", "/ask/stream"):
@@ -388,6 +394,34 @@ class Handler(BaseHTTPRequestHandler):
             return
         result = ask_hermes(question)
         self._send(200, json.dumps(result).encode("utf-8"), "application/json")
+
+    def _stream_notifications(self) -> None:
+        """Push new subscribed events to the browser with Server-Sent Events."""
+        client: queue.Queue[dict] = queue.Queue()
+        with _critical_notifications_lock:
+            _notification_clients.add(client)
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-store, no-cache, max-age=0")
+        self.send_header("X-Accel-Buffering", "no")
+        self.send_header("Connection", "keep-alive")
+        self.end_headers()
+        try:
+            self.wfile.write(b"retry: 3000\n\n")
+            self.wfile.flush()
+            while True:
+                try:
+                    notification = client.get(timeout=15)
+                    payload = f"data: {json.dumps(notification)}\n\n".encode("utf-8")
+                except queue.Empty:
+                    payload = b": heartbeat\n\n"
+                self.wfile.write(payload)
+                self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        finally:
+            with _critical_notifications_lock:
+                _notification_clients.discard(client)
 
     def _stream_answer(self, question: str) -> None:
         """Server-Sent Events: emit answer chunks as hermes generates them."""

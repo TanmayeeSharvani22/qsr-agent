@@ -116,6 +116,7 @@
     const refresh = document.getElementById('refresh');
     const alerts = document.getElementById('alerts');
     const alertCount = document.getElementById('alert-count');
+    const seenNotifications = new Set();
 
     async function loadServers() {
       services.innerHTML = '<li class="empty">Loading…</li>';
@@ -164,34 +165,46 @@
     loadServers();
     setInterval(() => loadStatus(false), 30000);
 
-    async function loadNotifications() {
+    function renderNotification(notification) {
+      const event = notification.event || {};
+      const id = event.ref_id || event.ts_ms || JSON.stringify(notification);
+      if (seenNotifications.has(id)) return;
+      seenNotifications.add(id);
+      if (alerts.querySelector('.alert-empty')) alerts.innerHTML = '';
+      const payload = event.payload || {};
+      const card = document.createElement('article');
+      card.className = 'alert-card';
+      const time = event.ts_ms ? new Date(event.ts_ms).toLocaleString() : 'time unavailable';
+      const service = event.service || 'service';
+      const severity = payload.severity || 'alert';
+      card.innerHTML = '<div class="alert-title"></div>' +
+        '<div class="alert-desc"></div>' +
+        '<div class="alert-meta"></div>';
+      card.querySelector('.alert-title').textContent = service + ' · ' + severity;
+      card.querySelector('.alert-desc').textContent = payload.description || payload.event_name || event.event_type || 'Operational alert';
+      card.querySelector('.alert-meta').textContent =
+        time + ' | zone: ' + (payload.zone || 'unknown') +
+        ' | station: ' + (payload.station || 'unknown');
+      alerts.prepend(card);
+      while (alerts.children.length > 100) alerts.lastElementChild.remove();
+      alertCount.textContent = seenNotifications.size;
+    }
+
+    async function loadNotificationHistory() {
       try {
         const res = await fetch('/notifications');
         const data = await res.json();
-        let countAlerts = 0;
-        alerts.innerHTML = '';
-        (data.notifications || []).forEach(notification => {
-          const event = notification.event || {};
-          countAlerts += 1;
-          const payload = event.payload || {};
-          const card = document.createElement('article');
-          card.className = 'alert-card';
-          const time = event.ts_ms ? new Date(event.ts_ms).toLocaleString() : 'time unavailable';
-          card.innerHTML = '<div class="alert-title">Critical food-safety event</div>' +
-            '<div class="alert-desc"></div>' +
-            '<div class="alert-meta"></div>';
-          card.querySelector('.alert-desc').textContent = payload.description || payload.event_name || 'Suspicious activity';
-          card.querySelector('.alert-meta').textContent =
-            time + ' | zone: ' + (payload.zone || 'unknown') +
-            ' | station: ' + (payload.station || 'unknown');
-          alerts.appendChild(card);
-        });
-        alertCount.textContent = countAlerts;
-        if (!countAlerts) alerts.innerHTML = '<div class="alert-empty">No critical alerts.</div>';
-      } catch (err) { /* notification polling is best effort */ }
+        (data.notifications || []).forEach(renderNotification);
+      } catch (err) { /* history loading is best effort */ }
     }
-    loadNotifications();
-    setInterval(loadNotifications, 2000);
+
+    function connectNotificationStream() {
+      const stream = new EventSource('/notifications/stream');
+      stream.onmessage = event => renderNotification(JSON.parse(event.data));
+    }
+
+    loadNotificationHistory();
+    connectNotificationStream();
 
     const SUGGESTIONS = [
       "List all suspicious-activity zones",

@@ -22,53 +22,23 @@ Git, curl, and approximately 8 GB of free disk.
 git clone https://github.com/intel-retail/qsr-agent.git
 cd qsr-agent
 ./scripts/setup.sh
-hermes
 ```
+
+Setup starts the Operator UI automatically. Open:
+
+```text
+http://127.0.0.1:8600
+```
+
+The UI provides operator chat, connected-service status, and a right-side
+Automatic Alerts panel for subscribed critical events. To use the CLI instead,
+run `hermes` from the repository.
 
 Validate an existing installation without changing it:
 
 ```bash
 ./scripts/setup.sh --check
 ```
-
-## Operator UI
-
-A lightweight web UI lets an operator chat with the agent and see which services
-are connected, without using the CLI. It has no extra dependencies (Python
-standard library only) and drives the same Hermes agent under the hood.
-
-`./scripts/setup.sh` starts it automatically at the end and prints the URL.
-By default it binds on all interfaces so you can open it from another machine
-on the LAN at `http://<host>:8600`. On the same host, use
-`http://127.0.0.1:8600`. Set `START_UI=false` to skip the auto-start, or set
-`QSR_UI_HOST=127.0.0.1` to restrict it to loopback.
-
-To start it manually (or restart it later):
-
-```bash
-python3 operator-ui/app.py            # serves on http://<host>:8600
-```
-
-If you kept the default LAN binding, open `http://<host>:8600` from your
-browser. If you set `QSR_UI_HOST=127.0.0.1`, forward the port first when the
-agent is on a remote box:
-
-```bash
-ssh -L 8600:127.0.0.1:8600 <user>@<host>
-```
-
-The left panel lists connected MCP apps with live status and tool counts. The
-center panel contains operator chat, while the right-side Automatic Alerts panel
-shows subscribed critical events without inserting them into the conversation.
-Ask questions like "List all suspicious-activity zones" or "What is our order
-accuracy rate?" and the agent answers from live MCP services.
-
-Options: `START_UI` (default `true`), `QSR_UI_HOST` (default `0.0.0.0`),
-`QSR_UI_PORT` (default `8600`), and `SUBSCRIBE_EVENTS_FILE` (default
-`agent-config/hermes/subscribe-events.yaml`). When started by setup, logs go to
-`/tmp/qsr-operator-ui.log`. See
-[Automatic event subscriptions](docs/setup.md#automatic-event-subscriptions)
-for same-machine Docker and distributed-machine examples.
 
 ## Uninstall
 

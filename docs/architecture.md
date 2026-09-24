@@ -53,8 +53,14 @@ Domain service emits an event
   -> match registered subscriptions
   -> POST the matching envelope to the callback URL
   -> QSR UI stores it in the notification queue
-  -> browser renders it in the Automatic Alerts panel
+  -> QSR UI pushes it over Server-Sent Events (SSE)
+  -> browser renders it immediately in the Automatic Alerts panel
 ```
+
+The browser performs one `GET /notifications` when the page opens to restore
+the backend's retained in-memory history. It then keeps a
+`GET /notifications/stream` SSE connection open for new events; there is no
+periodic alert polling.
 
 For example, Suspicious Activity registers:
 
