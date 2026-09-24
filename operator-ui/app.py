@@ -13,6 +13,7 @@ Environment:
     HERMES_BIN    hermes path (default ~/.local/bin/hermes)
     HERMES_TIMEOUT  per-question seconds (default 300)
     HERMES_REASONING reasoning effort per turn (default low)
+    QSR_MCP_SUBSCRIPTIONS  JSON list of remote MCP subscriptions to register
 """
 
 from __future__ import annotations
@@ -25,6 +26,8 @@ import shutil
 import subprocess
 import threading
 import time
+import uuid
+import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from collections import deque
@@ -39,6 +42,10 @@ HERMES_RESPONSE_STYLE = os.environ.get(
     "Use the relevant tool before answering factual or numeric questions. Do not estimate missing values. Answer in one short sentence unless the user explicitly asks for detail.",
 )
 HERMES_IDLE_DONE_SECONDS = float(os.environ.get("HERMES_IDLE_DONE_SECONDS", "3"))
+try:
+    MCP_SUBSCRIPTIONS: list[dict] = json.loads(os.environ.get("QSR_MCP_SUBSCRIPTIONS", "[]"))
+except json.JSONDecodeError:
+    MCP_SUBSCRIPTIONS = []
 
 _INDEX_PATH = Path(__file__).parent / "static" / "index.html"
 _critical_notifications: deque[dict] = deque(maxlen=100)
@@ -62,6 +69,76 @@ def _agent_env(hermes: str) -> dict:
 
 def _prepare_question(question: str) -> str:
     return f"{question.rstrip()}\n\n{HERMES_RESPONSE_STYLE}"
+
+
+def _mcp_request(
+    server_url: str,
+    session_id: str | None,
+    method: str,
+    params: dict | None = None,
+    request_id: str | None = None,
+) -> tuple[dict | None, str | None]:
+    message = {"jsonrpc": "2.0", "method": method, "params": params or {}}
+    if request_id is not None:
+        message["id"] = request_id
+    body = json.dumps(message).encode("utf-8")
+    request = urllib.request.Request(
+        server_url,
+        data=body,
+        headers={
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
+            **({"Mcp-Session-Id": session_id} if session_id else {}),
+        },
+        method="POST",
+    )
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    with opener.open(request, timeout=15) as response:
+        new_session = response.headers.get("Mcp-Session-Id") or session_id
+        raw = response.read().decode("utf-8")
+    data_lines = [line[5:].strip() for line in raw.splitlines() if line.startswith("data:")]
+    if data_lines:
+        raw = "\n".join(data_lines)
+    return (json.loads(raw) if raw else None), new_session
+
+
+def register_subscription(subscription: dict) -> bool:
+    """Register one generic MCP event subscription from deployment config."""
+    server_url = str(subscription["url"])
+    callback_url = str(subscription["callback_url"])
+    try:
+        result, session = _mcp_request(server_url, None, "initialize", {
+            "protocolVersion": "2025-03-26",
+            "capabilities": {},
+            "clientInfo": {"name": "qsr-operator-ui", "version": "1.0"},
+        }, request_id=str(uuid.uuid4()))
+        if result is None or "error" in result:
+            raise RuntimeError(result.get("error", "empty initialize response") if result else "empty initialize response")
+        _mcp_request(server_url, session, "notifications/initialized", request_id=None)
+        result, _ = _mcp_request(server_url, session, "tools/call", {
+            "name": "subscribe",
+            "arguments": {
+                "event_type": subscription["event_type"],
+                "condition": subscription.get("condition", "*"),
+                "callback_url": callback_url,
+            },
+        }, request_id=str(uuid.uuid4()))
+        if result is None or "error" in result:
+            raise RuntimeError(result.get("error", "empty subscribe response") if result else "empty subscribe response")
+        print(f"[QSR UI] Registered subscription for {subscription['event_type']} at {server_url}", flush=True)
+        return True
+    except (OSError, ValueError, KeyError, RuntimeError, StopIteration) as exc:
+        print(f"[QSR UI] Subscription registration failed for {server_url}: {exc}", flush=True)
+        return False
+
+
+def subscription_registration_loop() -> None:
+    while True:
+        if not MCP_SUBSCRIPTIONS:
+            return
+        if all(register_subscription(subscription) for subscription in MCP_SUBSCRIPTIONS):
+            return
+        time.sleep(30)
 
 
 _ANSI = re.compile(r"\x1b\[[0-9;]*m")
@@ -284,7 +361,9 @@ class Handler(BaseHTTPRequestHandler):
             except json.JSONDecodeError:
                 self._send(400, b'{"ok":false,"error":"invalid JSON"}', "application/json")
                 return
-            if not isinstance(notification, dict) or notification.get("type") != "critical_suspicious_activity":
+            if not isinstance(notification, dict) or notification.get("type") not in {
+                "critical_suspicious_activity", "mcp_event"
+            }:
                 self._send(400, b'{"ok":false,"error":"unsupported notification"}', "application/json")
                 return
             with _critical_notifications_lock:
@@ -338,6 +417,7 @@ class Handler(BaseHTTPRequestHandler):
 def main() -> None:
     if not _resolve_hermes():
         print(f"WARNING: hermes not found at {HERMES_BIN} or on PATH")
+    threading.Thread(target=subscription_registration_loop, name="mcp-subscriptions", daemon=True).start()
     server = ThreadingHTTPServer((HOST, PORT), Handler)
     print(f"Operator UI on http://{HOST}:{PORT}  (Ctrl-C to stop)")
     try:

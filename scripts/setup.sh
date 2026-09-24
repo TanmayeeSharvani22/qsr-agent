@@ -34,12 +34,17 @@ MCP_VENV_PY="$MCP_VENV/bin/python"
 # Operator UI: started automatically at the end of setup. Set START_UI=false to
 # skip, or override host/port.
 START_UI=${START_UI:-true}
-WARM_UP_UI=${WARM_UP_UI:-true}
+# The direct model warm-up above is sufficient for first-inference compilation.
+# A UI warm-up starts a full Hermes turn and can wait on remote MCP services, so
+# keep it opt-in for distributed deployments.
+WARM_UP_UI=${WARM_UP_UI:-false}
 # Bind on all interfaces by default so the UI is reachable from a browser on
 # another machine without SSH port forwarding. Set QSR_UI_HOST=127.0.0.1 to
 # restrict to loopback.
 QSR_UI_HOST=${QSR_UI_HOST:-0.0.0.0}
 QSR_UI_PORT=${QSR_UI_PORT:-8600}
+# JSON array of generic MCP subscriptions registered by the operator UI.
+QSR_MCP_SUBSCRIPTIONS=${QSR_MCP_SUBSCRIPTIONS:-[]}
 # Registrations are convention-based, not per-service code: each QSR sim is a
 # tests/mcp-services/<name>_server.py (auto-discovered), and real apps register
 # themselves via their own launch. This script never changes to add a service.
@@ -88,9 +93,10 @@ Optional environment variables:
     SDK_SUBDIR          Repo subdirectory holding the SDK
     MCP_VENV            Venv that launches the sim MCP servers
     START_UI            Auto-start the operator UI after setup (default true)
-    WARM_UP_UI          Run one warm-up UI chat request during setup (default true)
+    WARM_UP_UI          Run one warm-up UI chat request during setup (default false)
     QSR_UI_HOST         Operator UI bind host (default 0.0.0.0)
     QSR_UI_PORT         Operator UI bind port (default 8600)
+    QSR_MCP_SUBSCRIPTIONS  JSON list of MCP event subscriptions (default [])
 EOF
 }
 
@@ -516,16 +522,18 @@ start_operator_ui() {
     local probe_host="$QSR_UI_HOST"
     [[ "$probe_host" == "0.0.0.0" ]] && probe_host="127.0.0.1"
     local url="http://$probe_host:$QSR_UI_PORT/health"
-    local pid current_args
+    local pid current_args current_subscriptions
     pid=$(cat "$pid_file" 2>/dev/null || true)
     if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
-        if curl -fsS --max-time 2 "$url" >/dev/null 2>&1; then
+        current_subscriptions=$(tr '\0' '\n' </proc/"$pid"/environ 2>/dev/null | sed -n 's/^QSR_MCP_SUBSCRIPTIONS=//p' || true)
+        if curl -fsS --max-time 2 "$url" >/dev/null 2>&1 &&
+            [[ "$current_subscriptions" == "$QSR_MCP_SUBSCRIPTIONS" ]]; then
             log "Operator UI already running (pid $pid, http://$QSR_UI_HOST:$QSR_UI_PORT)"
             return 0
         fi
         current_args=$(ps -p "$pid" -o args= 2>/dev/null || true)
         if [[ "$current_args" == *"$ui"* ]]; then
-            log "Replacing unhealthy operator UI process (pid $pid)"
+            log "Replacing operator UI process (pid $pid) to apply configuration"
             kill "$pid" 2>/dev/null || true
             wait "$pid" 2>/dev/null || true
         else
@@ -536,6 +544,7 @@ start_operator_ui() {
     fi
     log "Starting operator UI on http://$QSR_UI_HOST:$QSR_UI_PORT"
     QSR_UI_HOST="$QSR_UI_HOST" QSR_UI_PORT="$QSR_UI_PORT" \
+        QSR_MCP_SUBSCRIPTIONS="$QSR_MCP_SUBSCRIPTIONS" \
         nohup python3 -u "$ui" > "$log_file" 2>&1 &
     echo $! > "$pid_file"
     if ! wait_for_operator_ui "$url" "$pid_file"; then

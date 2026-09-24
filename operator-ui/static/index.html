@@ -8,7 +8,7 @@
     :root { --bg:#0f1720; --panel:#161f2b; --side:#121a24; --line:#26364a; --me:#2563eb; --bot:#1f2a37; --txt:#e6edf3; --muted:#93a4b8; --ok:#22c55e; }
     * { box-sizing: border-box; }
     html, body { height:100%; margin:0; }
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--txt); display:grid; grid-template-columns:280px 1fr; height:100vh; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--txt); display:grid; grid-template-columns:280px minmax(0, 1fr) 350px; height:100vh; }
 
     aside { background:var(--side); border-right:1px solid var(--line); display:flex; flex-direction:column; min-width:0; }
     aside .brand { padding:16px 18px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:10px; }
@@ -46,8 +46,19 @@
     button.send { background:var(--me); color:#fff; border:0; border-radius:10px; padding:0 18px; font-weight:600; cursor:pointer; }
     button.send:disabled { opacity:.5; cursor:not-allowed; }
     .spin { display:inline-block; width:14px; height:14px; border:2px solid var(--muted); border-top-color:transparent; border-radius:50%; animation:s .8s linear infinite; vertical-align:middle; }
+    .alert-panel { background:#17151a; border-left:1px solid var(--line); display:flex; flex-direction:column; min-width:0; min-height:0; height:100vh; overflow:hidden; }
+    .alert-panel header { padding:14px 16px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:10px; }
+    .alert-panel h2 { font-size:15px; margin:0; font-weight:600; }
+    .alert-count { margin-left:auto; min-width:24px; text-align:center; background:#7f1d1d; color:#fecaca; border-radius:12px; padding:2px 7px; font-size:11px; }
+    #alerts { flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:12px; scrollbar-gutter:stable; }
+    .alert-empty { color:var(--muted); font-size:13px; padding:12px 4px; }
+    .alert-card { border:1px solid #713f46; border-left:3px solid #ef4444; background:#241b22; border-radius:8px; padding:11px; margin-bottom:10px; }
+    .alert-card .alert-title { color:#fecaca; font-size:11px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; }
+    .alert-card .alert-desc { margin-top:7px; font-size:13px; line-height:1.4; }
+    .alert-card .alert-meta { color:var(--muted); font-size:11px; line-height:1.5; margin-top:8px; }
     @keyframes s { to { transform:rotate(360deg); } }
-    @media (max-width:720px) { body { grid-template-columns:1fr; } aside { display:none; } }
+    @media (max-width:1050px) { body { grid-template-columns:220px minmax(0, 1fr) 300px; } }
+    @media (max-width:720px) { body { grid-template-columns:1fr; } aside, .alert-panel { display:none; } }
   </style>
 </head>
 <body>
@@ -85,6 +96,14 @@
     </form>
   </main>
 
+  <section class="alert-panel" aria-label="Automatic alerts">
+    <header>
+      <h2>Automatic Alerts</h2>
+      <span class="alert-count" id="alert-count">0</span>
+    </header>
+    <div id="alerts"><div class="alert-empty">No critical alerts.</div></div>
+  </section>
+
   <script>
     const chat = document.getElementById('chat');
     const form = document.getElementById('form');
@@ -95,7 +114,8 @@
     const count = document.getElementById('count');
     const status = document.getElementById('status');
     const refresh = document.getElementById('refresh');
-    const seenNotifications = new Set();
+    const alerts = document.getElementById('alerts');
+    const alertCount = document.getElementById('alert-count');
 
     async function loadServers() {
       services.innerHTML = '<li class="empty">Loading…</li>';
@@ -148,17 +168,26 @@
       try {
         const res = await fetch('/notifications');
         const data = await res.json();
+        let countAlerts = 0;
+        alerts.innerHTML = '';
         (data.notifications || []).forEach(notification => {
           const event = notification.event || {};
-          const id = event.ref_id || event.ts_ms;
-          if (seenNotifications.has(id)) return;
-          seenNotifications.add(id);
+          countAlerts += 1;
           const payload = event.payload || {};
-          add('bot', 'CRITICAL food-safety alert: ' +
-            (payload.description || payload.event_name || 'Suspicious activity') +
-            ' | zone: ' + (payload.zone || 'unknown') +
-            ' | station: ' + (payload.station || 'unknown'), true);
+          const card = document.createElement('article');
+          card.className = 'alert-card';
+          const time = event.ts_ms ? new Date(event.ts_ms).toLocaleString() : 'time unavailable';
+          card.innerHTML = '<div class="alert-title">Critical food-safety event</div>' +
+            '<div class="alert-desc"></div>' +
+            '<div class="alert-meta"></div>';
+          card.querySelector('.alert-desc').textContent = payload.description || payload.event_name || 'Suspicious activity';
+          card.querySelector('.alert-meta').textContent =
+            time + ' | zone: ' + (payload.zone || 'unknown') +
+            ' | station: ' + (payload.station || 'unknown');
+          alerts.appendChild(card);
         });
+        alertCount.textContent = countAlerts;
+        if (!countAlerts) alerts.innerHTML = '<div class="alert-empty">No critical alerts.</div>';
       } catch (err) { /* notification polling is best effort */ }
     }
     loadNotifications();

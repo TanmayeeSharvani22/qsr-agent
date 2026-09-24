@@ -34,6 +34,42 @@ User
 gives Qwen the real MCP schemas directly and removes the deferred
 `tool_search -> tool_describe -> tool_call` wrapper sequence.
 
+## Event Subscription Flow
+
+The operator UI is also a persistent MCP subscription client. This is separate
+from Hermes, which is invoked per question for conversational reads and actions.
+At UI startup, deployment configuration supplies a generic list of remote MCP
+subscriptions. The UI calls each service's `subscribe` tool with an event type,
+condition, and callback URL.
+
+```text
+QSR operator UI starts
+  -> initialize remote MCP session
+  -> call subscribe(event_type, condition, callback_url)
+
+Domain service emits an event
+  -> append the standard envelope to its durable log
+  -> run normal delivery sinks
+  -> match registered subscriptions
+  -> POST the matching envelope to the callback URL
+  -> QSR UI stores it in the notification queue
+  -> browser renders it in the Automatic Alerts panel
+```
+
+For example, Suspicious Activity registers:
+
+```text
+event_type = report_suspicious_activity
+condition = severity == critical
+```
+
+This path is deterministic and does not require an LLM decision. Hermes remains
+available for follow-up investigation through the service's read tools.
+
+Subscriptions are currently process-local. Restarting a domain MCP service
+clears its registrations, so the operator UI must register again. Subscriptions
+are forward-only: existing durable events are not replayed automatically.
+
 ## Repository Layout
 
 ```text
@@ -91,6 +127,17 @@ platform_toolsets:
 Do not configure both `url` and `command` for the same server. Keep the working
 stdio registration until the corresponding remote endpoint passes the agent's
 MCP connectivity test, then replace it atomically.
+
+Event subscriptions require connectivity in both directions:
+
+```text
+QSR machine -> service-machine /mcp
+service machine -> QSR-machine /notifications
+```
+
+Use routable DNS names or IP addresses for separate machines. Put both endpoints
+behind TLS and authentication in production, and restrict ingress to the known
+service and agent hosts.
 
 ## Service Owner Contract
 

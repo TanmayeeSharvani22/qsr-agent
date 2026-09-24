@@ -19,8 +19,8 @@ Prerequisites: Linux, Intel GPU access through `/dev/dri`, Python 3.11+, Docker,
 Git, curl, and approximately 8 GB of free disk.
 
 ```bash
-git clone https://github.com/unarayan/qsr-agentic-svc.git
-cd qsr-agentic-svc
+git clone https://github.com/intel-retail/qsr-agent.git
+cd qsr-agent
 ./scripts/setup.sh
 hermes
 ```
@@ -57,14 +57,17 @@ agent is on a remote box:
 ssh -L 8600:127.0.0.1:8600 <user>@<host>
 ```
 
-The left panel lists connected MCP apps with a live status and tool count; the
-right panel is the chat. Ask questions like "List all suspicious-activity zones"
-or "What is our order accuracy rate?" and the agent answers from the live MCP
-services.
+The left panel lists connected MCP apps with live status and tool counts. The
+center panel contains operator chat, while the right-side Automatic Alerts panel
+shows subscribed critical events without inserting them into the conversation.
+Ask questions like "List all suspicious-activity zones" or "What is our order
+accuracy rate?" and the agent answers from live MCP services.
 
 Options: `START_UI` (default `true`), `QSR_UI_HOST` (default `0.0.0.0`),
-`QSR_UI_PORT` (default `8600`). When started by setup, logs go to
-`/tmp/qsr-operator-ui.log`.
+`QSR_UI_PORT` (default `8600`), and `QSR_MCP_SUBSCRIPTIONS` (JSON subscription
+list). When started by setup, logs go to `/tmp/qsr-operator-ui.log`. See
+[Automatic event subscriptions](docs/setup.md#automatic-event-subscriptions)
+for same-machine Docker and distributed-machine examples.
 
 ## Uninstall
 
