@@ -13,6 +13,7 @@ Environment:
     HERMES_BIN    hermes path (default ~/.local/bin/hermes)
     HERMES_TIMEOUT  per-question seconds (default 300)
     HERMES_REASONING reasoning effort per turn (default low)
+    QSR_MCP_SUBSCRIPTIONS  JSON list of remote MCP subscriptions to register
 """
 
 from __future__ import annotations
@@ -25,8 +26,11 @@ import shutil
 import subprocess
 import threading
 import time
+import uuid
+import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from collections import deque
 
 HOST = os.environ.get("QSR_UI_HOST", "0.0.0.0")
 PORT = int(os.environ.get("QSR_UI_PORT", "8600"))
@@ -37,8 +41,16 @@ HERMES_RESPONSE_STYLE = os.environ.get(
     "HERMES_RESPONSE_STYLE",
     "Use the relevant tool before answering factual or numeric questions. Do not estimate missing values. Answer in one short sentence unless the user explicitly asks for detail.",
 )
+HERMES_IDLE_DONE_SECONDS = float(os.environ.get("HERMES_IDLE_DONE_SECONDS", "3"))
+try:
+    MCP_SUBSCRIPTIONS: list[dict] = json.loads(os.environ.get("QSR_MCP_SUBSCRIPTIONS", "[]"))
+except json.JSONDecodeError:
+    MCP_SUBSCRIPTIONS = []
 
 _INDEX_PATH = Path(__file__).parent / "static" / "index.html"
+_critical_notifications: deque[dict] = deque(maxlen=100)
+_critical_notifications_lock = threading.Lock()
+_notification_clients: set[queue.Queue[dict]] = set()
 
 
 def _resolve_hermes() -> str | None:
@@ -58,6 +70,76 @@ def _agent_env(hermes: str) -> dict:
 
 def _prepare_question(question: str) -> str:
     return f"{question.rstrip()}\n\n{HERMES_RESPONSE_STYLE}"
+
+
+def _mcp_request(
+    server_url: str,
+    session_id: str | None,
+    method: str,
+    params: dict | None = None,
+    request_id: str | None = None,
+) -> tuple[dict | None, str | None]:
+    message = {"jsonrpc": "2.0", "method": method, "params": params or {}}
+    if request_id is not None:
+        message["id"] = request_id
+    body = json.dumps(message).encode("utf-8")
+    request = urllib.request.Request(
+        server_url,
+        data=body,
+        headers={
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
+            **({"Mcp-Session-Id": session_id} if session_id else {}),
+        },
+        method="POST",
+    )
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    with opener.open(request, timeout=15) as response:
+        new_session = response.headers.get("Mcp-Session-Id") or session_id
+        raw = response.read().decode("utf-8")
+    data_lines = [line[5:].strip() for line in raw.splitlines() if line.startswith("data:")]
+    if data_lines:
+        raw = "\n".join(data_lines)
+    return (json.loads(raw) if raw else None), new_session
+
+
+def register_subscription(subscription: dict) -> bool:
+    """Register one generic MCP event subscription from deployment config."""
+    server_url = str(subscription["url"])
+    callback_url = str(subscription["callback_url"])
+    try:
+        result, session = _mcp_request(server_url, None, "initialize", {
+            "protocolVersion": "2025-03-26",
+            "capabilities": {},
+            "clientInfo": {"name": "qsr-operator-ui", "version": "1.0"},
+        }, request_id=str(uuid.uuid4()))
+        if result is None or "error" in result:
+            raise RuntimeError(result.get("error", "empty initialize response") if result else "empty initialize response")
+        _mcp_request(server_url, session, "notifications/initialized", request_id=None)
+        result, _ = _mcp_request(server_url, session, "tools/call", {
+            "name": "subscribe",
+            "arguments": {
+                "event_type": subscription["event_type"],
+                "condition": subscription.get("condition", "*"),
+                "callback_url": callback_url,
+            },
+        }, request_id=str(uuid.uuid4()))
+        if result is None or "error" in result:
+            raise RuntimeError(result.get("error", "empty subscribe response") if result else "empty subscribe response")
+        print(f"[QSR UI] Registered subscription for {subscription['event_type']} at {server_url}", flush=True)
+        return True
+    except (OSError, ValueError, KeyError, RuntimeError, StopIteration) as exc:
+        print(f"[QSR UI] Subscription registration failed for {server_url}: {exc}", flush=True)
+        return False
+
+
+def subscription_registration_loop() -> None:
+    while True:
+        if not MCP_SUBSCRIPTIONS:
+            return
+        if all(register_subscription(subscription) for subscription in MCP_SUBSCRIPTIONS):
+            return
+        time.sleep(30)
 
 
 _ANSI = re.compile(r"\x1b\[[0-9;]*m")
@@ -203,6 +285,7 @@ def stream_hermes(question: str):
     threading.Thread(target=_pump_stdout, daemon=True).start()
     yield {"event": "start", "message": "Connecting to Hermes..."}
     got_output = False
+    last_output = time.monotonic()
     last_heartbeat = time.monotonic()
     try:
         while True:
@@ -210,6 +293,9 @@ def stream_hermes(question: str):
                 chunk = outbox.get(timeout=0.5)
             except queue.Empty:
                 now = time.monotonic()
+                if got_output and now - last_output >= HERMES_IDLE_DONE_SECONDS:
+                    proc.terminate()
+                    break
                 if now - last_heartbeat >= 1.0:
                     last_heartbeat = now
                     yield {"event": "heartbeat", "message": "Waiting for Hermes..."}
@@ -219,8 +305,13 @@ def stream_hermes(question: str):
             if chunk.get("event") == "eof":
                 break
             got_output = True
+            last_output = time.monotonic()
             yield chunk
-        proc.wait(timeout=5)
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait(timeout=5)
     except Exception as exc:  # noqa: BLE001 - surface any read/wait failure to the client
         proc.kill()
         yield {"event": "error", "error": str(exc)[:2000]}
@@ -255,10 +346,36 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/status" or self.path == "/status?force=1":
             body = json.dumps(check_status(force=self.path.endswith("force=1"))).encode("utf-8")
             self._send(200, body, "application/json")
+        elif self.path == "/notifications":
+            with _critical_notifications_lock:
+                notifications = list(_critical_notifications)
+            self._send(200, json.dumps({"ok": True, "notifications": notifications}).encode("utf-8"), "application/json")
+        elif self.path == "/notifications/stream":
+            self._stream_notifications()
         else:
             self._send(404, b"not found", "text/plain; charset=utf-8")
 
     def do_POST(self) -> None:  # noqa: N802
+        if self.path == "/notifications":
+            length = int(self.headers.get("Content-Length", "0") or "0")
+            raw = self.rfile.read(length) if length else b"{}"
+            try:
+                notification = json.loads(raw or b"{}")
+            except json.JSONDecodeError:
+                self._send(400, b'{"ok":false,"error":"invalid JSON"}', "application/json")
+                return
+            if not isinstance(notification, dict) or notification.get("type") not in {
+                "critical_suspicious_activity", "mcp_event"
+            }:
+                self._send(400, b'{"ok":false,"error":"unsupported notification"}', "application/json")
+                return
+            with _critical_notifications_lock:
+                _critical_notifications.append(notification)
+                clients = list(_notification_clients)
+            for client in clients:
+                client.put(notification)
+            self._send(202, b'{"ok":true}', "application/json")
+            return
         if self.path not in ("/ask", "/ask/stream"):
             self._send(404, b'{"ok":false,"error":"not found"}', "application/json")
             return
@@ -277,6 +394,34 @@ class Handler(BaseHTTPRequestHandler):
             return
         result = ask_hermes(question)
         self._send(200, json.dumps(result).encode("utf-8"), "application/json")
+
+    def _stream_notifications(self) -> None:
+        """Push new subscribed events to the browser with Server-Sent Events."""
+        client: queue.Queue[dict] = queue.Queue()
+        with _critical_notifications_lock:
+            _notification_clients.add(client)
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-store, no-cache, max-age=0")
+        self.send_header("X-Accel-Buffering", "no")
+        self.send_header("Connection", "keep-alive")
+        self.end_headers()
+        try:
+            self.wfile.write(b"retry: 3000\n\n")
+            self.wfile.flush()
+            while True:
+                try:
+                    notification = client.get(timeout=15)
+                    payload = f"data: {json.dumps(notification)}\n\n".encode("utf-8")
+                except queue.Empty:
+                    payload = b": heartbeat\n\n"
+                self.wfile.write(payload)
+                self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        finally:
+            with _critical_notifications_lock:
+                _notification_clients.discard(client)
 
     def _stream_answer(self, question: str) -> None:
         """Server-Sent Events: emit answer chunks as hermes generates them."""
@@ -306,6 +451,7 @@ class Handler(BaseHTTPRequestHandler):
 def main() -> None:
     if not _resolve_hermes():
         print(f"WARNING: hermes not found at {HERMES_BIN} or on PATH")
+    threading.Thread(target=subscription_registration_loop, name="mcp-subscriptions", daemon=True).start()
     server = ThreadingHTTPServer((HOST, PORT), Handler)
     print(f"Operator UI on http://{HOST}:{PORT}  (Ctrl-C to stop)")
     try:

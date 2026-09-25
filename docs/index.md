@@ -55,7 +55,9 @@ Verify an existing installation at any time without changing it:
 | Install Hermes and local inference | [Complete setup](setup.md#2-run-setup) |
 | Start or inspect OVMS | [Exact OVMS bring-up](setup.md#4-exact-ovms-bring-up) |
 | Validate MCP and agent Q&A | [Run and verify](setup.md#5-run-and-verify) |
+| Configure proactive event alerts | [Automatic event subscriptions](setup.md#automatic-event-subscriptions) |
 | Understand component ownership | [Responsibility boundaries](architecture.md#responsibility-boundaries) |
+| Understand subscription callbacks | [Event subscription flow](architecture.md#event-subscription-flow) |
 | Deploy remote MCP services | [Remote deployment](architecture.md#remote-deployment) |
 | Add a QSR domain | [Adding a QSR service](adding-a-service.md) |
 
