@@ -14,7 +14,7 @@ HERMES_INSTALL_URL=${HERMES_INSTALL_URL:-https://hermes-agent.nousresearch.com/i
 # The SDK is always installed from Git (no local-checkout dependency).
 SDK_GIT_URL=${SDK_GIT_URL:-https://github.com/sachinkaushik/edge-ai-libraries.git}
 SDK_GIT_REF=${SDK_GIT_REF:-mcp}
-SDK_SUBDIR=${SDK_SUBDIR:-libraries/mcp-service-sdk}
+SDK_SUBDIR=${SDK_SUBDIR:-frameworks/mcp-service-sdk}
 SDK_INSTALL_DIR=""
 # Optional: pin Hermes to a validated commit (full 40-char SHA). The installer
 # tracks `main` by default, and newer builds have changed behavior (e.g. a
@@ -594,9 +594,8 @@ start_operator_ui() {
     fi
     log "Starting operator UI on http://$QSR_UI_HOST:$QSR_UI_PORT"
     QSR_UI_HOST="$QSR_UI_HOST" QSR_UI_PORT="$QSR_UI_PORT" \
-        nohup "$MCP_VENV_PY" -u "$ui" > "$log_file" 2>&1 &
         QSR_MCP_SUBSCRIPTIONS="$QSR_MCP_SUBSCRIPTIONS" \
-        nohup python3 -u "$ui" > "$log_file" 2>&1 &
+        nohup "$MCP_VENV_PY" -u "$ui" > "$log_file" 2>&1 &
     echo $! > "$pid_file"
     if ! wait_for_operator_ui "$url" "$pid_file"; then
         pid=$(cat "$pid_file" 2>/dev/null || true)
