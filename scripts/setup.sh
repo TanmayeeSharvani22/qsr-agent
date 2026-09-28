@@ -253,7 +253,7 @@ ensure_mcp_venv() {
     "$MCP_VENV_PY" -m pip install --quiet --upgrade pip
     resolve_sdk_dir
     log "Installing mcp-service-sdk into the MCP service venv from $SDK_INSTALL_DIR"
-    "$MCP_VENV_PY" -m pip install --quiet --upgrade "$SDK_INSTALL_DIR[mcp]" ||
+    "$MCP_VENV_PY" -m pip install --quiet --upgrade "$SDK_INSTALL_DIR[mcp]" -r "$ROOT_DIR/autonomy/requirements.txt" ||
         fail "Failed to install mcp-service-sdk into $MCP_VENV"
 }
 
@@ -594,6 +594,7 @@ start_operator_ui() {
     fi
     log "Starting operator UI on http://$QSR_UI_HOST:$QSR_UI_PORT"
     QSR_UI_HOST="$QSR_UI_HOST" QSR_UI_PORT="$QSR_UI_PORT" \
+        nohup "$MCP_VENV_PY" -u "$ui" > "$log_file" 2>&1 &
         QSR_MCP_SUBSCRIPTIONS="$QSR_MCP_SUBSCRIPTIONS" \
         nohup python3 -u "$ui" > "$log_file" 2>&1 &
     echo $! > "$pid_file"

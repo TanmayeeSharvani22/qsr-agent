@@ -16,14 +16,31 @@
     aside .brand h1 { font-size:15px; margin:0; font-weight:600; }
     aside .section { padding:14px 16px 6px; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); display:flex; align-items:center; justify-content:space-between; }
     aside .count { background:var(--panel); border:1px solid var(--line); border-radius:20px; padding:1px 8px; font-size:11px; color:var(--txt); }
-    #services { list-style:none; margin:0; padding:6px 10px; overflow-y:auto; flex:1; }
-    #services li { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:10px; margin-bottom:6px; background:var(--panel); border:1px solid var(--line); font-size:13px; }
+    #services, #approvals { list-style:none; margin:0; padding:6px 10px; overflow-y:auto; }
+    #services { max-height:34vh; }
+    #approvals { flex:1; }
+    #services li, #approvals li { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:8px; margin-bottom:6px; background:var(--panel); border:1px solid var(--line); font-size:13px; }
     #services li .s-dot { width:8px; height:8px; border-radius:50%; background:var(--muted); flex:0 0 auto; }
     #services li.up .s-dot { background:var(--ok); }
     #services li.down .s-dot { background:#ef4444; }
     #services li .s-name { font-weight:600; }
     #services li .s-meta { margin-left:auto; font-size:11px; color:var(--muted); }
-    #services .empty { color:var(--muted); background:transparent; border:0; padding:10px 12px; }
+    #services .empty, #approvals .empty { color:var(--muted); background:transparent; border:0; padding:10px 12px; }
+    #approvals li { display:block; }
+    #approvals li, .weather-state { overflow-wrap:anywhere; }
+    .action-arguments { white-space:pre-wrap; font-size:11px; margin:7px 0; }
+    .approval-title { font-weight:600; line-height:1.35; }
+    .approval-meta { color:var(--muted); font-size:11px; margin-top:5px; }
+    .approval-reason { color:var(--txt); font-size:12px; line-height:1.35; margin-top:6px; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; }
+    .approval-context { color:var(--muted); font-size:12px; line-height:1.3; margin-top:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .technical-details { margin-top:12px; font-size:11px; color:var(--muted); }
+    .technical-details summary { cursor:pointer; }
+    .approval-actions { display:flex; gap:6px; margin-top:8px; }
+    .approval-actions button { border:1px solid var(--line); border-radius:6px; padding:5px 9px; cursor:pointer; color:var(--txt); background:transparent; }
+    .approval-actions .approve { border-color:var(--ok); }
+    .approval-actions .reject { border-color:#ef4444; }
+    .approval-status { color:var(--muted); font-size:11px; margin-top:7px; text-transform:uppercase; }
+    .weather-state { color:var(--muted); font-size:11px; padding:4px 10px 8px; }
     aside .foot { padding:12px 16px; border-top:1px solid var(--line); color:var(--muted); font-size:11px; display:flex; align-items:center; }
     aside .refresh { background:transparent; color:var(--muted); border:1px solid var(--line); border-radius:8px; padding:4px 8px; font-size:11px; cursor:pointer; }
     aside .refresh:hover { border-color:var(--me); color:var(--txt); }
@@ -57,6 +74,13 @@
     .alert-card .alert-desc { margin-top:7px; font-size:13px; line-height:1.4; }
     .alert-card .alert-meta { color:var(--muted); font-size:11px; line-height:1.5; margin-top:8px; }
     @keyframes s { to { transform:rotate(360deg); } }
+    @media (max-width:720px) {
+      body { grid-template-columns:1fr; height:auto; }
+      aside { max-height:60vh; }
+      #approvals { min-height:120px; }
+      main { height:70vh; }
+      #q { min-width:0; }
+    }
     @media (max-width:1050px) { body { grid-template-columns:220px minmax(0, 1fr) 300px; } }
     @media (max-width:720px) { body { grid-template-columns:1fr; } aside, .alert-panel { display:none; } }
   </style>
@@ -72,6 +96,12 @@
       <span class="count" id="count">…</span>
     </div>
     <ul id="services"><li class="empty">Loading…</li></ul>
+    <div class="section">
+      <span>Autonomy decisions</span>
+      <span class="count" id="approval-count">…</span>
+    </div>
+    <div class="weather-state" id="weather-state">Events: waiting</div>
+    <ul id="approvals"><li class="empty">Loading…</li></ul>
     <div class="foot">
       <button class="refresh" id="refresh">Refresh</button>
       <span style="margin-left:8px;">Hermes · Qwen3 · MCP</span>
@@ -114,6 +144,10 @@
     const count = document.getElementById('count');
     const status = document.getElementById('status');
     const refresh = document.getElementById('refresh');
+    const approvals = document.getElementById('approvals');
+    const approvalCount = document.getElementById('approval-count');
+    const weatherState = document.getElementById('weather-state');
+    let lastAutonomySnapshot = '';
     const alerts = document.getElementById('alerts');
     const alertCount = document.getElementById('alert-count');
     const seenNotifications = new Set();
@@ -161,9 +195,285 @@
       } catch (err) { /* leave dots neutral */ }
     }
 
-    refresh.onclick = () => { loadServers(); loadStatus(true); };
+    async function decide(proposalId, decision) {
+      try {
+        const res = await fetch('/autonomy/proposals/' + encodeURIComponent(proposalId) + '/' + decision, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{}'
+        });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || 'decision failed');
+        loadAutonomy();
+      } catch (err) {
+        add('bot', 'Autonomy action failed: ' + err, true);
+      }
+    }
+
+    async function loadAutonomy() {
+      try {
+        const res = await fetch('/autonomy/status');
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data.error || 'Autonomy unavailable');
+        const snapshot = JSON.stringify(data) + (data.queue && data.queue.processing ? ':' + Math.floor(Date.now() / 5000) : '');
+        if (snapshot === lastAutonomySnapshot) return;
+        const scrollTop = approvals.scrollTop;
+        const decisions = data.decisions || [];
+        const latest = decisions[0];
+        weatherState.textContent = latest
+          ? eventLabel(latest.event.event_type) + ' · ' + statusLabel(latest.status)
+          : 'Events: waiting';
+        const queue = data.queue || {};
+        if (queue.processing || queue.queued) {
+          weatherState.textContent = (queue.processing ? 'Assessing 1 event' : 'Waiting for assessment') +
+            (queue.queued ? ' · ' + queue.queued + ' waiting' : '');
+        }
+        const priority = status => ['pending', 'processing', 'queued', 'failed', 'executing'].includes(status) ? 0 : 1;
+        const list = data.proposals.slice().sort((first, second) => priority(first.status) - priority(second.status)).slice(0, 10);
+        approvalCount.textContent = data.ok ? data.pending : '!';
+        approvals.innerHTML = '';
+        if (list.length === 0 && decisions.length === 0) {
+          approvals.innerHTML = '<li class="empty">No decisions yet</li>';
+          return;
+        }
+        list.forEach(proposal => {
+          const li = document.createElement('li');
+          li.dataset.priority = priority(proposal.status);
+          li.dataset.timestamp = Date.parse(proposal.created_at || '') || 0;
+          const title = document.createElement('div');
+          title.className = 'approval-title';
+          title.textContent = actionTitle(proposal);
+          li.appendChild(title);
+          const evidence = proposal.evidence || {};
+          addText(li, 'approval-context', compactEventInfo(
+            evidence.event_type, evidence.event_data || {}, evidence
+          ));
+          if (proposal.status === 'pending') {
+            addText(li, 'approval-reason', 'Hermes: ' + (proposal.summary || 'Action proposed for review.'));
+          }
+          if (proposal.status === 'pending') {
+            const actions = document.createElement('div');
+            actions.className = 'approval-actions';
+            const approve = document.createElement('button');
+            approve.className = 'approve';
+            approve.textContent = 'Approve';
+            approve.onclick = () => decide(proposal.id, 'approve');
+            const reject = document.createElement('button');
+            reject.className = 'reject';
+            reject.textContent = 'Reject';
+            reject.onclick = () => decide(proposal.id, 'reject');
+            actions.append(approve, reject);
+            li.appendChild(actions);
+          } else {
+            const state = document.createElement('div');
+            state.className = 'approval-status';
+            state.textContent = statusLabel(proposal.status) + (proposal.result && proposal.result.placeholder ? ' · demo' : '');
+            li.appendChild(state);
+            if (proposal.result) {
+              const result = document.createElement('div');
+              result.className = 'approval-reason';
+              result.textContent = proposal.status === 'failed'
+                ? 'The change was not completed. Review the latest event before trying again.'
+                : (proposal.result.message || 'The service confirmed the result.');
+              li.appendChild(result);
+            }
+          }
+          approvals.appendChild(li);
+        });
+        decisions.filter(decision => !decision.proposal_id)
+          .sort((first, second) => priority(first.status) - priority(second.status)).slice(0, 5).forEach(decision => {
+          const li = document.createElement('li');
+          li.dataset.priority = priority(decision.status);
+          li.dataset.timestamp = Date.parse(decision.event.occurred_at || '') || 0;
+          const title = document.createElement('div');
+          title.className = 'approval-title';
+          title.textContent = eventLabel(decision.event.event_type);
+          const meta = document.createElement('div');
+          meta.className = 'approval-meta';
+          meta.textContent = statusLabel(decision.status);
+          li.append(title, meta);
+          addText(li, 'approval-context', compactEventInfo(
+            decision.event.event_type, decision.event.data || {}, decision
+          ));
+          addText(li, 'approval-reason', decision.status === 'failed'
+            ? (/timed out/i.test(decision.summary || '')
+              ? 'Assessment timed out. No change was made. Submit the event again to retry.'
+              : 'This event could not be assessed. No change was made.')
+            : (decision.summary ? 'Hermes: ' + decision.summary : (decision.status === 'queued'
+              ? 'Waiting for earlier events to finish.' : 'Assessment in progress.')));
+          if (decision.status === 'processing' && decision.progress) {
+            const progress = decision.progress;
+            const elapsed = Math.max(0, Math.floor(Date.now() / 1000 - progress.stage_started_at));
+            addText(li, 'approval-meta', 'Assessing · Step ' + progress.round + ' of ' + progress.max_rounds + ' · ' + elapsed + 's');
+          }
+          approvals.appendChild(li);
+        });
+        [...approvals.children].sort((first, second) => Number(first.dataset.priority) - Number(second.dataset.priority)
+          || Number(second.dataset.timestamp) - Number(first.dataset.timestamp))
+          .forEach(item => approvals.appendChild(item));
+        approvals.scrollTop = scrollTop;
+        lastAutonomySnapshot = snapshot;
+      } catch (err) {
+        lastAutonomySnapshot = '';
+        approvalCount.textContent = '!';
+        approvals.innerHTML = '<li class="empty">Autonomy unavailable</li>';
+      }
+    }
+
+    function readable(value) {
+      const text = String(value).replace(/[_.-]+/g, ' ');
+      return text.charAt(0).toUpperCase() + text.slice(1);
+    }
+
+    function statusLabel(status) {
+      return ({pending:'Awaiting your approval', no_action:'No change needed',
+        queued:'Waiting to be assessed',
+        processing:'Assessing event', executing:'Applying change', executed:'Completed',
+        rejected:'Rejected', superseded:'Replaced by a newer recommendation',
+        failed:'Needs review'})[status] || readable(status);
+    }
+
+    function eventLabel(type) {
+      return ({order_mismatch_detected:'Order issue reported', weather_changed:'Weather update',
+        local_weather_observation_received:'Weather update', queue_count_changed:'Queue update'})[type]
+        || readable(type || 'Store event');
+    }
+
+    function addText(parent, className, text) {
+      const element = document.createElement('div');
+      element.className = className;
+      element.textContent = text;
+      parent.appendChild(element);
+    }
+
+    function eventFacts(parent, type, data, evidence = {}, showHeading = true) {
+      if (showHeading) addText(parent, 'approval-reason', eventLabel(type));
+      const facts = [];
+      if (data.order_id) facts.push('Order ' + data.order_id);
+      if (typeof data.is_raining === 'boolean') facts.push(data.is_raining ? 'Rain reported' : 'No rain reported');
+      else if (data.condition) facts.push(readable(data.condition));
+      if (typeof data.temperature_c === 'number') facts.push(data.temperature_c + ' °C');
+      if (typeof data.queue_count === 'number') facts.push(data.queue_count + ' customers in the queue');
+      if (facts.length) addText(parent, 'approval-reason', facts.join(' · '));
+      const context = (evidence.observations || {})['accuracy.get_order_accuracy_context'] || {};
+      const order = (context.recent_orders || []).find(order => order.order_id === data.order_id);
+      if (order) {
+        const issues = (order.issues || []).map(issue => {
+          if (issue.type === 'missing_item') return 'Missing ' + readable(issue.item_id);
+          if (issue.type === 'wrong_item') return readable(issue.observed) + ' received instead of ' + readable(issue.expected);
+          return readable(issue.type);
+        });
+        if (issues.length) addText(parent, 'approval-reason', issues.join('. ') + '.');
+        if (order.station_id) addText(parent, 'approval-meta', readable(order.station_id));
+      }
+      const known = new Set(['order_id', 'is_raining', 'condition', 'temperature_c', 'queue_count']);
+      friendlyFields(parent, Object.fromEntries(Object.entries(data).filter(([key]) => !known.has(key))));
+    }
+
+    function actionTitle(proposal) {
+      if (proposal.tool === 'accuracy.request_remake') return 'Remake order ' + proposal.arguments.order_id;
+      if (proposal.tool === 'kiosk.change_menu_items' || proposal.tool === 'change_menu_items') {
+        const changes = proposal.arguments.changes || [];
+        const items = Object.values((proposal.evidence || {}).observations || {}).flatMap(context => (context.menu || {}).items || []);
+        const labels = changes.map(change => {
+          const item = items.find(item => item.id === change.item_id);
+          return item ? item.name : readable(change.item_id);
+        });
+        const availability = changes.length && changes.every(change => change.available === changes[0].available)
+          ? (changes[0].available ? 'Make available: ' : 'Hide: ')
+          : 'Update menu: ';
+        return availability + labels.join(', ');
+      }
+      return readable(proposal.tool.split('.').pop());
+    }
+
+    function compactEventInfo(type, data, evidence) {
+      const facts = [];
+      if (data.order_id) {
+        facts.push('Order ' + data.order_id);
+        const context = (evidence.observations || {})['accuracy.get_order_accuracy_context'] || {};
+        const order = (context.recent_orders || []).find(item => item.order_id === data.order_id);
+        if (order) {
+          const issue = (order.issues || [])[0];
+          if (issue && issue.type === 'missing_item') facts.push('Missing ' + readable(issue.item_id));
+          else if (issue && issue.type === 'wrong_item') facts.push(readable(issue.observed) + ' instead of ' + readable(issue.expected));
+          if (order.station_id) facts.push(readable(order.station_id));
+        }
+      }
+      if (type === 'weather_changed' || type === 'local_weather_observation_received') {
+        if (typeof data.is_raining === 'boolean') facts.push(data.is_raining ? 'Rain' : 'No rain');
+        else if (data.condition) facts.push(readable(data.condition));
+        if (typeof data.temperature_c === 'number') facts.push(data.temperature_c + ' °C');
+      }
+      if (type === 'queue_count_changed') {
+        if (typeof data.queue_count === 'number') facts.push('Queue ' + data.queue_count);
+        if (typeof data.previous_queue_count === 'number') facts.push('from ' + data.previous_queue_count);
+        if (Array.isArray(data.temporarily_hidden_items) && data.temporarily_hidden_items.length) {
+          facts.push('Restricted: ' + data.temporarily_hidden_items.map(readable).join(', '));
+        }
+      }
+      if (!facts.length) {
+        Object.entries(data).filter(([, value]) => value === null || ['string', 'number', 'boolean'].includes(typeof value))
+          .slice(0, 2).forEach(([key, value]) => facts.push(readable(key) + ' ' + String(value)));
+      }
+      const simulated = Object.values(evidence.observations || {}).some(context =>
+        String(context.source || '').includes('placeholder'));
+      if (simulated) facts.push('Demo');
+      return facts.join(' · ') || eventLabel(type);
+    }
+
+    function actionFacts(parent, proposal) {
+      const args = proposal.arguments || {};
+      if (proposal.tool === 'accuracy.request_remake') {
+        addText(parent, 'approval-reason', 'Request a remake of order ' + args.order_id + '.');
+      } else if (Array.isArray(args.changes) && args.changes.every(change => typeof change.available === 'boolean' && change.item_id)) {
+        const items = Object.values((proposal.evidence || {}).observations || {}).flatMap(context => (context.menu || {}).items || []);
+        args.changes.forEach(change => {
+          const item = items.find(item => item.id === change.item_id);
+          addText(parent, 'approval-reason', (change.available ? 'Make available: ' : 'Hide from menu: ') +
+            (item ? item.name : readable(change.item_id)));
+          if (change.reason) addText(parent, 'approval-meta', change.reason);
+        });
+      } else {
+        addText(parent, 'approval-reason', proposal.summary);
+        friendlyFields(parent, args);
+      }
+    }
+
+    function friendlyFields(parent, fields) {
+      Object.entries(fields).forEach(([key, value]) => {
+        if (value === null || value === undefined) return;
+        if (typeof value === 'object') {
+          addText(parent, 'approval-label', readable(key));
+          if (Array.isArray(value)) value.forEach(item => {
+            if (item && typeof item === 'object') friendlyFields(parent, item);
+            else addText(parent, 'approval-reason', String(item));
+          });
+          else friendlyFields(parent, value);
+        } else {
+          addText(parent, 'approval-reason', readable(key) + ': ' +
+            (typeof value === 'boolean' ? (value ? 'Yes' : 'No') : value));
+        }
+      });
+    }
+
+    function technicalDetails(parent, data) {
+      const details = document.createElement('details');
+      details.className = 'technical-details';
+      const summary = document.createElement('summary');
+      summary.textContent = 'Technical details';
+      const payload = document.createElement('pre');
+      payload.className = 'action-arguments';
+      payload.textContent = JSON.stringify(data, null, 2);
+      details.append(summary, payload);
+      parent.appendChild(details);
+    }
+
+    refresh.onclick = () => { loadServers(); loadStatus(true); loadAutonomy(); };
     loadServers();
+    loadAutonomy();
     setInterval(() => loadStatus(false), 30000);
+    setInterval(loadAutonomy, 5000);
 
     function renderNotification(notification) {
       const event = notification.event || {};
@@ -233,6 +543,7 @@
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
+      if (send.disabled) return;
       const question = q.value.trim();
       if (!question) return;
       add('me', question);
