@@ -30,7 +30,8 @@ production restaurant integrations.
 
 1. Follow [Complete setup](setup.md) to install and run the exact local stack.
 2. Read [Architecture](architecture.md) for ownership and trust boundaries.
-3. Follow [Adding a service](adding-a-service.md) to integrate another QSR
+3. Read [Autonomous decisions](autonomy.md) for event-triggered actions.
+4. Follow [Adding a service](adding-a-service.md) to integrate another QSR
    domain or replace a simulation with an authoritative service.
 
 After prerequisites are installed, the normal path is:
@@ -56,6 +57,7 @@ Verify an existing installation at any time without changing it:
 | Start or inspect OVMS | [Exact OVMS bring-up](setup.md#4-exact-ovms-bring-up) |
 | Validate MCP and agent Q&A | [Run and verify](setup.md#5-run-and-verify) |
 | Understand component ownership | [Responsibility boundaries](architecture.md#responsibility-boundaries) |
+| Extend event skills and capabilities | [Autonomous decisions](autonomy.md) |
 | Deploy remote MCP services | [Remote deployment](architecture.md#remote-deployment) |
 | Add a QSR domain | [Adding a QSR service](adding-a-service.md) |
 

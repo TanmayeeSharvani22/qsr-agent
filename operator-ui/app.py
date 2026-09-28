@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
-"""Minimal operator chat UI backend for the QSR agent (stdlib only).
+"""Minimal operator chat UI backend for the QSR agent.
 
 Serves a single-page chat UI and forwards each operator question to the Hermes
 agent via `hermes -z`, reusing the exact path verified on the CLI. No web
-framework and no pip installs, so it runs anywhere the agent runs.
+framework; event argument validation uses autonomy/requirements.txt.
 
 Run:
-    python3 operator-ui/app.py            # then open http://127.0.0.1:8600
+    .venv/mcp/bin/python operator-ui/app.py
 Environment:
     QSR_UI_HOST   bind host   (default 0.0.0.0)
     QSR_UI_PORT   bind port   (default 8600)
     HERMES_BIN    hermes path (default ~/.local/bin/hermes)
     HERMES_TIMEOUT  per-question seconds (default 300)
     HERMES_REASONING reasoning effort per turn (default low)
+    QSR_AUTONOMY_DB persistent proposal database
 """
 
 from __future__ import annotations
@@ -21,12 +22,20 @@ import json
 import os
 import queue
 import re
+import signal
 import shutil
 import subprocess
+import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+
+_ROOT_PATH = Path(__file__).resolve().parent.parent
+if str(_ROOT_PATH) not in sys.path:
+    sys.path.insert(0, str(_ROOT_PATH))
+
+from autonomy.worker import build_controller
 
 HOST = os.environ.get("QSR_UI_HOST", "0.0.0.0")
 PORT = int(os.environ.get("QSR_UI_PORT", "8600"))
@@ -39,6 +48,7 @@ HERMES_RESPONSE_STYLE = os.environ.get(
 )
 
 _INDEX_PATH = Path(__file__).parent / "static" / "index.html"
+AUTONOMY = build_controller(_ROOT_PATH)
 
 
 def _resolve_hermes() -> str | None:
@@ -53,11 +63,37 @@ def _agent_env(hermes: str) -> dict:
     # Loopback must bypass any corporate proxy or the OVMS call fails with 403.
     env["NO_PROXY"] = "localhost,127.0.0.1,::1"
     env["no_proxy"] = "localhost,127.0.0.1,::1"
+    for proxy_name in (
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "all_proxy",
+    ):
+        env.pop(proxy_name, None)
     return env
 
 
 def _prepare_question(question: str) -> str:
     return f"{question.rstrip()}\n\n{HERMES_RESPONSE_STYLE}"
+
+
+def _normalize_answer(answer: str) -> str:
+    lines: list[str] = []
+    previous_text: str | None = None
+    for raw_line in answer.splitlines():
+        text = raw_line.strip()
+        if not text:
+            if lines and lines[-1]:
+                lines.append("")
+            continue
+        normalized = " ".join(text.split()).casefold()
+        if normalized == previous_text:
+            continue
+        lines.append(text)
+        previous_text = normalized
+    return "\n".join(lines).strip()
 
 
 _ANSI = re.compile(r"\x1b\[[0-9;]*m")
@@ -146,20 +182,27 @@ def ask_hermes(question: str) -> dict:
     # config.yaml sets the default but this keeps the UI fast even if that drifts.
     cmd = [hermes, "--reasoning", HERMES_REASONING, "-z", _prepare_question(question)]
     try:
-        proc = subprocess.run(
+        proc = subprocess.Popen(
             cmd,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=HERMES_TIMEOUT,
             stdin=subprocess.DEVNULL,
             env=env,
+            start_new_session=True,
         )
+        try:
+            stdout, stderr = proc.communicate(timeout=HERMES_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            os.killpg(proc.pid, signal.SIGKILL)
+            proc.wait()
+            return {"ok": False, "error": f"Hermes timed out after {HERMES_TIMEOUT:.0f}s"}
     except subprocess.TimeoutExpired:
         return {"ok": False, "error": f"Hermes timed out after {HERMES_TIMEOUT:.0f}s"}
 
-    answer = (proc.stdout or "").strip()
+    answer = _normalize_answer(stdout or "")
     if not answer and proc.returncode != 0:
-        return {"ok": False, "error": (proc.stderr or "Hermes returned no output").strip()[:2000]}
+        return {"ok": False, "error": (stderr or "Hermes returned no output").strip()[:2000]}
     return {"ok": True, "answer": answer or "(no answer)"}
 
 
@@ -185,6 +228,7 @@ def stream_hermes(question: str):
             env=env,
             text=True,
             bufsize=1,  # line-buffered so partial output reaches the browser
+            start_new_session=True,
         )
     except OSError as exc:
         yield {"event": "error", "error": f"could not start hermes: {exc}"}
@@ -222,7 +266,8 @@ def stream_hermes(question: str):
             yield chunk
         proc.wait(timeout=5)
     except Exception as exc:  # noqa: BLE001 - surface any read/wait failure to the client
-        proc.kill()
+        os.killpg(proc.pid, signal.SIGKILL)
+        proc.wait()
         yield {"event": "error", "error": str(exc)[:2000]}
         return
 
@@ -255,20 +300,63 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/status" or self.path == "/status?force=1":
             body = json.dumps(check_status(force=self.path.endswith("force=1"))).encode("utf-8")
             self._send(200, body, "application/json")
+        elif self.path == "/autonomy/status":
+            body = json.dumps({"ok": True, **AUTONOMY.status()}).encode("utf-8")
+            self._send(200, body, "application/json")
         else:
             self._send(404, b"not found", "text/plain; charset=utf-8")
 
     def do_POST(self) -> None:  # noqa: N802
-        if self.path not in ("/ask", "/ask/stream"):
-            self._send(404, b'{"ok":false,"error":"not found"}', "application/json")
-            return
         length = int(self.headers.get("Content-Length", "0") or "0")
         raw = self.rfile.read(length) if length else b"{}"
         try:
-            question = (json.loads(raw or b"{}").get("question") or "").strip()
+            payload = json.loads(raw or b"{}")
         except json.JSONDecodeError:
             self._send(400, b'{"ok":false,"error":"invalid JSON"}', "application/json")
             return
+        if not isinstance(payload, dict):
+            self._send(400, b'{"ok":false,"error":"JSON object required"}', "application/json")
+            return
+
+        if self.path == "/autonomy/events":
+            try:
+                result = AUTONOMY.enqueue_event(payload)
+            except ValueError as error:
+                body = json.dumps({"ok": False, "error": str(error)}).encode("utf-8")
+                self._send(400, body, "application/json")
+                return
+            except RuntimeError as error:
+                body = json.dumps({"ok": False, "error": str(error)}).encode("utf-8")
+                self._send(502, body, "application/json")
+                return
+            body = json.dumps({"ok": True, **result}).encode("utf-8")
+            self._send(202, body, "application/json")
+            return
+
+        match = re.fullmatch(r"/autonomy/proposals/([^/]+)/(approve|reject)", self.path)
+        if match:
+            proposal_id, decision = match.groups()
+            try:
+                result = (
+                    AUTONOMY.approve(proposal_id)
+                    if decision == "approve"
+                    else AUTONOMY.reject(proposal_id)
+                )
+            except KeyError:
+                self._send(404, b'{"ok":false,"error":"proposal not found"}', "application/json")
+                return
+            except ValueError as error:
+                body = json.dumps({"ok": False, "error": str(error)}).encode("utf-8")
+                self._send(409, body, "application/json")
+                return
+            body = json.dumps({"ok": True, "proposal": result}).encode("utf-8")
+            self._send(200, body, "application/json")
+            return
+
+        if self.path not in ("/ask", "/ask/stream"):
+            self._send(404, b'{"ok":false,"error":"not found"}', "application/json")
+            return
+        question = (payload.get("question") or "").strip()
         if not question:
             self._send(400, b'{"ok":false,"error":"empty question"}', "application/json")
             return
@@ -309,9 +397,13 @@ def main() -> None:
     server = ThreadingHTTPServer((HOST, PORT), Handler)
     print(f"Operator UI on http://{HOST}:{PORT}  (Ctrl-C to stop)")
     try:
+        AUTONOMY.start()
         server.serve_forever()
     except KeyboardInterrupt:
-        server.shutdown()
+        pass
+    finally:
+        server.server_close()
+        AUTONOMY.stop()
 
 
 if __name__ == "__main__":

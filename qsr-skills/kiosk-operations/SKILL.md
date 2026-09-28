@@ -20,6 +20,7 @@ a fresh context call is available.
 |---|---|---|---|
 | Current queue or guests waiting | `get_kiosk_context` | `operations.queue_count`, `observed_at` | State the count and observation time. Do not convert orders into people. |
 | Current wait time | `get_kiosk_context` | `operations.estimated_wait_minutes`, `observed_at` | Say that the value is an estimate and include minutes. |
+| Current weather | `get_kiosk_context` | `weather.condition`, `weather.is_raining`, `weather.temperature_c`, `weather.source` | Treat this as temporary kiosk-owned context and include its source. |
 | Store status, kiosks, or staffing | `get_kiosk_context` | `operations.status`, `operations.active_kiosks`, `operations.staff_on_duty` | Return only requested values, with useful nearby context when it changes the interpretation. |
 | Menu price or availability | `get_kiosk_context` | `menu.active_menu_id`, matching entry in `menu.items` | Match by stable `id` when available; otherwise match the displayed name exactly and state ambiguity. |
 | Recent demand or kiosk activity | `get_kiosk_context` | `recent_activity.orders_last_15_minutes`, `top_item`, `abandoned_sessions` | Preserve the service's time window and distinguish orders from sessions. |
@@ -35,8 +36,8 @@ domain's skill and context tool before synthesizing the answer.
 
 ## Menu Actions
 
-`change_menu` changes operational state. A diagnostic question never authorizes
-an action.
+`change_menu` and `change_menu_items` change operational state. A diagnostic
+question never authorizes an action.
 
 1. Call `get_kiosk_context` to resolve the exact item ID and current state.
 2. Present the proposed item ID, availability and/or price, and reason.
@@ -46,6 +47,12 @@ an action.
 6. If `placeholder` is true, explicitly say that no real kiosk was modified.
 
 Never infer approval from urgency, a prior approval, or a request to analyze.
+Autonomy-generated menu proposals follow the same rule: only the operator UI's
+Approve action authorizes execution.
+
+`change_menu_items` accepts one approved bundle of at most three availability
+changes. Hermes event proposals are recommendations, not authorization; do not
+call the tool until the matching proposal is approved.
 
 ## Owner Extension
 

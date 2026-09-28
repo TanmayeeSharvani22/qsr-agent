@@ -46,8 +46,19 @@ on the LAN at `http://<host>:8600`. On the same host, use
 To start it manually (or restart it later):
 
 ```bash
-python3 operator-ui/app.py            # serves on http://<host>:8600
+.venv/mcp/bin/python operator-ui/app.py  # serves on http://<host>:8600
 ```
+
+The UI also hosts a generic autonomy webhook. Hermes selects relevant skills
+and MCP reads for incoming events; resulting actions wait for approval in the
+**Autonomy decisions** panel. See
+[Autonomous decisions](docs/autonomy.md) for runnable examples and extension
+points.
+
+There is no fixed event-to-action mapping. The included catalog supports menu
+availability and order-remake proposals. Extensions add capabilities and skills,
+not event policies. The application validates model-selected reads and proposed
+actions, and records no-action reasons when intervention is not justified.
 
 If you kept the default LAN binding, open `http://<host>:8600` from your
 browser. If you set `QSR_UI_HOST=127.0.0.1`, forward the port first when the
@@ -90,6 +101,7 @@ Model files under `~/models` and the local venvs (`.venv/`) are left in place.
 | [Documentation guide](docs/index.md) | Reading order, repository map, and common tasks |
 | [Complete setup](docs/setup.md) | Prerequisites, Hermes, OVMS, Docker, verification, and troubleshooting |
 | [Architecture](docs/architecture.md) | Ownership, trust boundaries, transports, and deployment |
+| [Autonomous decisions](docs/autonomy.md) | Events, skill selection, capabilities, and approval |
 | [Adding a service](docs/adding-a-service.md) | MCP server/client, Hermes registration, skills, actions, and tests |
 
 ## Repository Map
@@ -100,7 +112,7 @@ Model files under `~/models` and the local venvs (`.venv/`) are left in place.
 | `tests/mcp-services/` | Runnable Kiosk and Order Accuracy simulations |
 | `qsr-skills/` | Hermes domain routing and interpretation procedures |
 | `agent-config/hermes/` | Local and remote Hermes configuration fragments |
-| `operator-ui/` | Standalone web chat UI + connected-services panel (stdlib only) |
+| `operator-ui/` | Web chat, connected services, and event decision approvals |
 | `scripts/setup.sh` | Idempotent local installation and validation |
 
 ## Current Scope
