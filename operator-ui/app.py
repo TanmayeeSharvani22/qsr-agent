@@ -422,7 +422,10 @@ class Handler(BaseHTTPRequestHandler):
                 client.put(notification)
             self._send(202, b'{"ok":true}', "application/json")
             return
-        if self.path not in ("/ask", "/ask/stream"):
+        is_autonomy_proposal = re.fullmatch(
+            r"/autonomy/proposals/[^/]+/(approve|reject)", self.path
+        )
+        if self.path not in ("/ask", "/ask/stream", "/autonomy/events") and not is_autonomy_proposal:
             self._send(404, b'{"ok":false,"error":"not found"}', "application/json")
             return
         length = int(self.headers.get("Content-Length", "0") or "0")
