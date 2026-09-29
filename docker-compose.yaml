@@ -17,7 +17,8 @@ services:
     ports:
       - "127.0.0.1:${OVMS_PORT:-4444}:8000"
     volumes:
-      - ${MODEL_ROOT:-./models}:/models:ro
+      # Writable: OVMS writes graph.pbtxt next to the model on startup.
+      - ${MODEL_ROOT:-./models}:/models
     devices:
       - /dev/dri:/dev/dri
     user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
