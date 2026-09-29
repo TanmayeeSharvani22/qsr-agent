@@ -1,54 +1,72 @@
 ---
 name: order-accuracy
-description: "Answer order accuracy, mismatch, station, confidence, flagged-order, and alert questions; safely route remake and comp actions through the order-accuracy MCP service."
-version: 1.0.0
+description: "Answer order accuracy, rework-rate, order-history, and station-totals questions for the Take-away and Dine-in Order Accuracy MCP services."
+version: 3.0.0
 platforms: [linux]
 metadata:
   hermes:
-    tags: [QSR, Order-Accuracy, Mismatch, Station, Remake, Comp]
+    tags: [QSR, Order-Accuracy, Take-away, Dine-in, Rework-Rate, Station]
 ---
 
 # Order Accuracy
 
-Use the Order Accuracy MCP service as the only source of live accuracy facts.
-Do not treat a model inference, remembered value, or kiosk result as accuracy
-evidence.
+Use the Order Accuracy MCP services as the only source of live accuracy facts.
+Never answer from memory or an earlier turn when a fresh tool call is
+available.
 
-## Tool Routing
+Order Accuracy currently exposes two separate deployments — one per venue
+format — registered as distinct MCP servers:
 
-| User intent or question | Tool | Fields to use | Answer rule |
+* `order-accuracy-take-away` — the Take-away application.
+* `order-accuracy-dine-in` — the Dine-in application.
+
+## Contract Discovery
+
+Before the first order-accuracy tool call in a conversation for a given
+service, call `describe`. Use the returned contract to identify the current
+read tools, input schemas, and event types for that service — Order Accuracy
+is sensor-only, so `describe` should report no action tools; if it ever does,
+treat that as a live signal and re-derive routing from it rather than from
+this file. Do not use `describe` as evidence for live accuracy facts.
+
+Map each request to the required capability below, then choose the compatible
+tool from `describe`. If no compatible tool is available, explain that the
+service contract does not support the request rather than guessing.
+
+Always call the service that matches the venue format implied by the question
+(e.g. "take-away order" → `order-accuracy-take-away`; "dine-in"/table/station
+"T1"/"T2" → `order-accuracy-dine-in`). If the venue format is not stated and
+both services are registered, ask which one, or call both and label each
+result by service.
+
+If a question implies taking an action (remake, comp, alert dismissal), check
+`describe` first; if no compatible action tool is available, explain that
+Order Accuracy can only report data and does not support that action.
+
+## Capability Routing
+
+| User intent or question | Required capability | Fields to use | Answer rule |
 |---|---|---|---|
-| Current accuracy rate | `get_order_accuracy_context` | `summary.accuracy_rate`, `orders_accurate`, `orders_observed`, `window_minutes`, `observed_at` | Format rate as a percentage and include the fraction and time window. |
-| Number of inaccurate or flagged orders | `get_order_accuracy_context` | `summary.orders_flagged`, `summary.orders_observed`, `window_minutes` | State flagged count separately from observed count. |
-| Which station is performing poorly | `get_order_accuracy_context` | `stations`, `alerts` | Compare station counts without inventing station rates when denominators are absent. Include matching alert evidence. |
-| What was wrong with an order | `get_order_accuracy_context` | matching `recent_orders[].expected_items`, `observed_items`, `issues` | Identify missing/wrong items and include confidence; do not claim certainty beyond the confidence value. |
-| Recent mismatches or alerts | `get_order_accuracy_context` | `recent_orders`, `alerts` | Separate detected mismatches from service-generated alerts. |
-| Any other order-accuracy analysis | `get_order_accuracy_context` | All returned fields relevant to the question | Call once, reason over the snapshot, show calculations briefly, and state missing evidence instead of guessing. |
+| Current or comparative rework/reject rate | Retrieve the rework rate for a period, optionally filtered by station, compared against a baseline period | period, station, orders seen, orders failed, rework rate, baseline period, baseline rework rate, baseline orders seen, delta vs. baseline | Report the rate as a percentage for the requested period; include the baseline comparison and delta only if the user asked for or implied a comparison. |
+| Recent order validation history / recent mismatches | Retrieve order validation history (validated/failed events), oldest first | event type, status, order id, station, timestamp, accuracy score, missing items, extra items, quantity mismatches, reason | List orders in the order returned; state validated vs. failed and the reason for each failure. Do not invent an order that isn't in the result. |
+| Pass/fail totals by station | Retrieve per-station pass/fail totals and rework rate | station (if provided), validated, failed, total, rework rate | Report validated/failed counts per station; call once per named station if the user asks about specific stations (e.g. T1 and T2), or once with no station filter for an all-station breakdown. |
+| What the service/tool contract supports | Describe the service's current contract | service, store id, event types, read tools (and action tools, if any) | Use only to answer meta-questions about capabilities; never to answer a data question. |
+| Any other order-accuracy analysis | Best compatible read capability from the current contract | all relevant returned fields | Call the smallest set of tools needed, reason over the returned data only, and state missing evidence instead of guessing. |
 
 ## Complex Questions
 
-For trends, likely causes, prioritization, station comparisons, or open-ended
-questions, call `get_order_accuracy_context` once. Use only fields present in
-the response, preserve the summary window, and distinguish observed facts from
-recommendations. A snapshot does not prove a historical trend unless the
-service returns multiple time periods.
+For trends, likely causes, or open-ended questions, call the relevant
+capability above once each. Use only fields present in the response and state
+missing evidence instead of guessing. A single snapshot does not prove a
+historical trend unless the service returns multiple periods (the rework-rate
+capability does, via its baseline period).
 
-## Remake Actions
+## Service Unavailable
 
-A question about a mismatch does not authorize a remake.
-
-1. Call `get_order_accuracy_context` and locate the exact `order_id` and issue.
-2. Explain the evidence and proposed remake reason.
-3. Obtain explicit user approval before calling `request_remake`.
-4. Report `executed`, `gate`, `status`, and `action_id`.
-5. If `placeholder` is true, state that no production line was notified.
-
-## Comp Actions
-
-`issue_comp` is policy-gated and always requires explicit human approval. Never
-choose an amount that the user did not provide or approve. If execution is
-denied, report the denial and do not retry. If `placeholder` is true, state that
-no external payment or POS system was changed.
+If a call to `order-accuracy-take-away` or `order-accuracy-dine-in` fails or
+the server cannot be reached, say that service is unavailable and answer only
+the portions of the question supported by the other service or by other
+successful tool results. Never substitute a remembered or invented number.
 
 ## Owner Extension
 
