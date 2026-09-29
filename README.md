@@ -46,9 +46,10 @@ make status
 make down
 ```
 
-Set `QSR_SAD_MCP_URL` to the routable MCP URL, for example
-`http://10.0.0.25:9000/mcp`. Set `QSR_CALLBACK_URL` to a URL the SAD host can
-reach, for example `http://<qsr-host-ip>:8600/notifications`.
+Register remote services in `agent-config/hermes/remote-mcp.example.yaml`, setting
+each `url` to a routable MCP address, for example `http://10.0.0.25:9000/mcp`. Set
+`QSR_CALLBACK_URL` to a URL the service host can reach, for example
+`http://<qsr-host-ip>:8600/notifications`.
 
 The UI also hosts a generic autonomy webhook. Hermes selects relevant skills
 and MCP reads for incoming events; resulting actions wait for approval in the

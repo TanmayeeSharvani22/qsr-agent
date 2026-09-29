@@ -43,7 +43,6 @@ services:
       MODEL_ID: ${MODEL_ID:-OpenVINO/Qwen3-8B-int4-ov}
       QSR_MODEL_BASE_URL: http://ovms:8000/v3
       QSR_ADVISOR_BASE_URL: http://ovms:8000/v3
-      QSR_SAD_MCP_URL: ${QSR_SAD_MCP_URL:-}
       QSR_CALLBACK_URL: ${QSR_CALLBACK_URL:-}
       QSR_UI_HOST: 0.0.0.0
       QSR_UI_PORT: "8600"
@@ -59,6 +58,8 @@ services:
     ports:
       - "${QSR_UI_HOST:-0.0.0.0}:${QSR_UI_PORT:-8600}:8600"
     volumes:
+      # Live service catalog: edit agent-config/hermes/*.yaml then `make restart`.
+      - ./agent-config:/opt/qsr/agent-config:ro
       - hermes-home:/home/qsr/.hermes
       - autonomy-state:/home/qsr/.local/state/qsr-agent
     extra_hosts:

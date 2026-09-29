@@ -6,7 +6,6 @@ OVMS_PORT ?= 4444
 QSR_UI_PORT ?= 8600
 QSR_UI_HOST ?= 0.0.0.0
 SDK_REF ?= mcp
-QSR_SAD_MCP_URL ?=
 QSR_CALLBACK_URL ?=
 HERMES_INSTALL_COMMIT ?=
 HOST_UID ?= $(shell id -u)
@@ -15,7 +14,7 @@ RENDER_DEVICE ?= $(firstword $(wildcard /dev/dri/renderD*))
 RENDER_GID ?= $(shell if [ -n "$(RENDER_DEVICE)" ]; then stat -c '%g' "$(RENDER_DEVICE)"; else echo 992; fi)
 
 export MODEL_ROOT MODEL_ID OVMS_PORT QSR_UI_PORT QSR_UI_HOST SDK_REF
-export QSR_SAD_MCP_URL QSR_CALLBACK_URL HERMES_INSTALL_COMMIT
+export QSR_CALLBACK_URL HERMES_INSTALL_COMMIT
 export HOST_UID HOST_GID RENDER_GID
 
 .PHONY: init-env check build build-ready up up-ready down restart logs status download-models

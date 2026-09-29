@@ -87,9 +87,12 @@ Hermes configuration/history and autonomy proposals are persisted in named
 volumes. OVMS mounts `MODEL_ROOT` read-only and is available to the agent at
 `http://ovms:8000/v3` inside the Compose network.
 
-Set `QSR_SAD_MCP_URL` to the SAD MCP address reachable from the QSR container.
-For push subscriptions, set `QSR_CALLBACK_URL` to an address reachable from the
-SAD host/container; a loopback URL on either machine will not reach the other.
+Register services in `agent-config/hermes/remote-mcp.example.yaml`, setting each
+`url` to an address reachable from the QSR container. For push subscriptions,
+add them to `agent-config/hermes/subscribe-events.yaml`; set `QSR_CALLBACK_URL`
+to an address reachable from the service host/container when the per-subscription
+callback default does not apply. A loopback URL on either machine will not reach
+the other.
 
 ### Legacy host setup
 
