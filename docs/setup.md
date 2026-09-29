@@ -66,13 +66,17 @@ make up
 ```
 
 Every `make up` run copies `.env.example` to `.env`, replacing any existing
-`.env`. The example uses `${HOME}/models`; edit `.env.example` for remote SAD
-MCP, callback URLs, or other overrides. Edits made directly to `.env` are lost.
+`.env`. The example uses a repo-local `./models`; edit `.env.example` for remote
+SAD MCP, callback URLs, or other overrides. Edits made directly to `.env` are
+lost.
 
 `make up` validates Docker, Intel render-device access, and the existing model,
-builds the agent image, then runs `docker compose up -d`. Useful commands:
+builds the agent image, then runs `docker compose up -d`. Download the model
+first with `make download-models` (it fetches `OpenVINO/Qwen3-8B-int4-ov` into
+`./models`). Useful commands:
 
 ```bash
+make download-models
 make logs
 make status
 make down
@@ -96,7 +100,7 @@ on the host. It is idempotent and performs these operations:
 2. Installs Hermes with its official installer when `hermes` is absent.
 3. Installs model/YAML helpers in `.venv/qsr-setup`; when venv support is
   unavailable, it uses an isolated `.venv/qsr-setup-target` directory.
-4. Downloads `OpenVINO/Qwen3-8B-int4-ov` to `$HOME/models`.
+4. Downloads `OpenVINO/Qwen3-8B-int4-ov` to `<repo>/models`.
 5. Pulls the OVMS GPU image and starts `ovms-qwen3-8b` on loopback port 8000.
 6. Backs up and merges `~/.hermes/config.yaml`; unrelated settings survive.
 7. Registers Kiosk and Order Accuracy as local stdio MCP servers.
@@ -214,7 +218,7 @@ Restart an interactive Hermes process after any configuration or skill change.
 The setup script runs the equivalent of this validated command:
 
 ```bash
-MODEL_ROOT="$HOME/models"
+MODEL_ROOT="$PWD/models"
 MODEL_ID=OpenVINO/Qwen3-8B-int4-ov
 RENDER_NODE=$(find /dev/dri -maxdepth 1 -name 'renderD*' -print -quit)
 RENDER_GROUP=$(stat -c '%g' "$RENDER_NODE")

@@ -1,6 +1,6 @@
 -include .env
 
-MODEL_ROOT ?= $(HOME)/models
+MODEL_ROOT ?= $(CURDIR)/models
 MODEL_ID ?= OpenVINO/Qwen3-8B-int4-ov
 OVMS_PORT ?= 4444
 QSR_UI_PORT ?= 8600
@@ -18,11 +18,14 @@ export MODEL_ROOT MODEL_ID OVMS_PORT QSR_UI_PORT QSR_UI_HOST SDK_REF
 export QSR_SAD_MCP_URL QSR_CALLBACK_URL HERMES_INSTALL_COMMIT
 export HOST_UID HOST_GID RENDER_GID
 
-.PHONY: init-env check build build-ready up up-ready down restart logs status
+.PHONY: init-env check build build-ready up up-ready down restart logs status download-models
 
 init-env:
 	@cp .env.example .env
 	@echo "Refreshed .env from .env.example"
+
+download-models:
+	bash download_models/model_download.sh
 
 check:
 	@command -v docker >/dev/null || { echo "Docker is required" >&2; exit 1; }

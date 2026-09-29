@@ -4,7 +4,7 @@ set -Eeuo pipefail
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 MODEL_ID=${MODEL_ID:-OpenVINO/Qwen3-8B-int4-ov}
 MODEL_REVISION=${MODEL_REVISION:-5c47abf4b8e12ebe8e99745bb0c1ec17e0c0abcc}
-MODEL_ROOT=${MODEL_ROOT:-"$HOME/models"}
+MODEL_ROOT=${MODEL_ROOT:-"$ROOT_DIR/models"}
 OVMS_IMAGE=${OVMS_IMAGE:-openvino/model_server@sha256:2a52cd2bc62d984f35f12b1cf58bb5dffe5f5d57b6ef3349b1b37229a768806b}
 OVMS_CONTAINER=${OVMS_CONTAINER:-ovms-qwen3-8b}
 # Default off 8000 to avoid clashing with SAD's alert-service (make up binds :8000).
@@ -82,7 +82,7 @@ Use --check to validate an existing installation without changing it.
 Optional environment variables:
     MODEL_ID            Hugging Face model ID
     MODEL_REVISION      Hugging Face commit revision
-  MODEL_ROOT          Host model directory (default: $HOME/models)
+  MODEL_ROOT          Host model directory (default: <repo>/models)
     OVMS_IMAGE          OVMS GPU image reference
   OVMS_CONTAINER      OVMS container name
   OVMS_PORT           Loopback port for OVMS (default: 8000)
