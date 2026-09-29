@@ -53,13 +53,17 @@ services:
       QSR_MCP_PYTHON: /opt/qsr/.venv/mcp/bin/python
       QSR_MCP_SUBSCRIPTIONS: "[]"
       SAD_TIMEZONE: ${SAD_TIMEZONE:-Asia/Kolkata}
-      NO_PROXY: localhost,127.0.0.1,::1,ovms,host.docker.internal
-      no_proxy: localhost,127.0.0.1,::1,ovms,host.docker.internal
+      # Bypass the corporate proxy for loopback, the compose network, and LAN
+      # ranges — remote MCP services (e.g. SAD on a 10.x host) are reached direct.
+      NO_PROXY: localhost,127.0.0.1,::1,ovms,host.docker.internal,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,.intel.com
+      no_proxy: localhost,127.0.0.1,::1,ovms,host.docker.internal,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,.intel.com
     ports:
       - "${QSR_UI_HOST:-0.0.0.0}:${QSR_UI_PORT:-8600}:8600"
     volumes:
       # Live service catalog: edit agent-config/hermes/*.yaml then `make restart`.
       - ./agent-config:/opt/qsr/agent-config:ro
+      # Live skills: edit qsr-skills/*/SKILL.md then `make restart`.
+      - ./qsr-skills:/opt/qsr/qsr-skills:ro
       - hermes-home:/home/qsr/.hermes
       - autonomy-state:/home/qsr/.local/state/qsr-agent
     extra_hosts:
