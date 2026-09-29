@@ -21,9 +21,12 @@ Git, curl, and approximately 8 GB of free disk.
 ```bash
 git clone https://github.com/intel-retail/qsr-agent.git
 cd qsr-agent
-cp .env.example .env  # edit MODEL_ROOT and optional remote service URLs
 make up
 ```
+
+On first run, `make up` creates `.env` from `.env.example` if it doesn't exist;
+it never overwrites an existing `.env`. Edit it later to configure remote
+services or other overrides.
 
 `make up` builds the Hermes/operator image and starts it with OVMS through
 Docker Compose. The model must already be present under `MODEL_ROOT/MODEL_ID`;

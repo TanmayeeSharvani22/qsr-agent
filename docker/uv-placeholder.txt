@@ -1,1 +1,0 @@
-This placeholder is copied when no predownloaded uv archive is configured.

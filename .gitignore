@@ -1,4 +1,5 @@
 .venv/
+.env
 tests/mcp-services/__pycache__/
 tests/mcp-services/logs/
 operator-ui/__pycache__/app.cpython-312.pyc

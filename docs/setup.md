@@ -52,53 +52,22 @@ export https_proxy="$HTTPS_PROXY"
 export no_proxy="$NO_PROXY"
 ```
 
-If TLS is intercepted, provide the organization's trusted PEM root CA to the
-image build. For example:
-
-Set the certificate path in `.env`:
-
-```dotenv
-QSR_CA_CERT_FILE=/path/to/company-root-ca.crt
-```
-
-Or override it for one run with `make up QSR_CA_CERT_FILE=/path/to/company-root-ca.crt`.
-
-The certificate is added to the image trust store before the Hermes installer
-runs, allowing its `curl` download of `uv` to validate the proxy certificate.
-Configure the Docker daemon's proxy separately if `docker pull` cannot reach
-Docker Hub. Do not disable TLS verification.
-
-If you cannot obtain the proxy CA, you can download Hermes' pinned `uv` archive
-from a machine with working certificate validation and transfer it to this
-host. For this Linux x86-64 image, the installer pins uv 0.12.3 to this SHA-256:
-
-```text
-600cf9a742aca00d292673b16b5acffaa7b8c269a364ad0c2e79498dcb1fe101
-```
-
-On the trusted machine, download and verify the artifact:
-
-```bash
-curl -fL https://github.com/astral-sh/uv/releases/download/0.12.3/uv-x86_64-unknown-linux-gnu.tar.gz -o uv-0.12.3-linux-x64.tar.gz
-echo '600cf9a742aca00d292673b16b5acffaa7b8c269a364ad0c2e79498dcb1fe101  uv-0.12.3-linux-x64.tar.gz' | sha256sum -c -
-```
-
-Transfer that archive to the QSR host and set `QSR_UV_ARCHIVE` in `.env` to its
-path. `make up` stages it into the image, verifies the same digest again, and
-places the executable in Hermes' pinned runtime directory so the installer
-doesn’t request it from GitHub. This fallback covers the Hermes `uv` bootstrap;
-the image build still needs access to the Hermes installer, SDK repository, and
-Python package indexes (or trusted internal mirrors for those sources).
+If TLS is intercepted, configure the system or Docker daemon to trust the
+organization's proxy CA; do not disable TLS verification. The image build needs
+network access to the Hermes installer, SDK repository, and Python package
+indexes.
 
 ## 2. Run setup
 
 ```bash
 git clone https://github.com/intel-retail/qsr-agent.git
 cd qsr-agent
-cp .env.example .env
-# Edit MODEL_ROOT and optional remote SAD MCP/callback URLs.
 make up
 ```
+
+On first run, `make up` copies `.env.example` to `.env` only when `.env` is
+missing. The example uses `${HOME}/models`; edit `.env` for remote SAD MCP,
+callback URLs, or other overrides. Existing settings are never overwritten.
 
 `make up` validates Docker, Intel render-device access, and the existing model,
 builds the agent image, then runs `docker compose up -d`. Useful commands:

@@ -36,9 +36,6 @@ services:
         SDK_REF: ${SDK_REF:-mcp}
         HERMES_INSTALL_URL: ${HERMES_INSTALL_URL:-https://hermes-agent.nousresearch.com/install.sh}
         HERMES_INSTALL_COMMIT: ${HERMES_INSTALL_COMMIT:-}
-        QSR_EXTRA_CA_CERT_B64: ${QSR_EXTRA_CA_CERT_B64:-}
-        QSR_UV_BUILD_PATH: ${QSR_UV_BUILD_PATH:-docker/uv-placeholder.txt}
-        QSR_UV_PREBUILT: ${QSR_UV_PREBUILT:-false}
     depends_on:
       - ovms
     environment:
