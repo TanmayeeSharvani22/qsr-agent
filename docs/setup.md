@@ -65,9 +65,9 @@ cd qsr-agent
 make up
 ```
 
-On first run, `make up` copies `.env.example` to `.env` only when `.env` is
-missing. The example uses `${HOME}/models`; edit `.env` for remote SAD MCP,
-callback URLs, or other overrides. Existing settings are never overwritten.
+Every `make up` run copies `.env.example` to `.env`, replacing any existing
+`.env`. The example uses `${HOME}/models`; edit `.env.example` for remote SAD
+MCP, callback URLs, or other overrides. Edits made directly to `.env` are lost.
 
 `make up` validates Docker, Intel render-device access, and the existing model,
 builds the agent image, then runs `docker compose up -d`. Useful commands:

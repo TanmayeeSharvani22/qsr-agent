@@ -21,7 +21,8 @@ export HOST_UID HOST_GID RENDER_GID
 .PHONY: init-env check build build-ready up up-ready down restart logs status
 
 init-env:
-	@if [ ! -f .env ]; then cp .env.example .env; echo "Created .env from .env.example"; fi
+	@cp .env.example .env
+	@echo "Refreshed .env from .env.example"
 
 check:
 	@command -v docker >/dev/null || { echo "Docker is required" >&2; exit 1; }

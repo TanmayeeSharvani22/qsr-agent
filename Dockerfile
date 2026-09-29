@@ -15,11 +15,28 @@ RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         bash build-essential ca-certificates curl ffmpeg git libffi-dev python3-dev ripgrep \
     && rm -rf /var/lib/apt/lists/* \
-    && useradd --create-home --uid 10001 --shell /bin/bash qsr
+    && useradd --create-home --uid 10001 --shell /bin/bash qsr \
+    && mkdir -p /opt/qsr /home/qsr/.hermes /home/qsr/.local/state/qsr-agent \
+    && chown -R qsr:qsr /opt/qsr /home/qsr
 
 WORKDIR /opt/qsr
-COPY --chown=qsr:qsr . .
 
+# Installed before the app source so code edits don't re-run this slow, flaky download.
+USER qsr
+# Retries cover GitHub rate limits (HTTP 429) and intermittent TLS chain failures.
+RUN curl -fsSL "$HERMES_INSTALL_URL" -o /tmp/install-hermes.sh \
+    && set -- --skip-setup --non-interactive --skip-browser --skip-computer-use \
+    && if [ -n "$HERMES_INSTALL_COMMIT" ]; then set -- "$@" --commit "$HERMES_INSTALL_COMMIT"; fi \
+    && for attempt in 1 2 3 4 5; do \
+        bash /tmp/install-hermes.sh "$@" && break; \
+        if [ "$attempt" = 5 ]; then echo "Hermes install failed after $attempt attempts" >&2; exit 1; fi; \
+        wait_seconds=$((attempt * 60)); \
+        echo "Hermes install attempt $attempt failed; retrying in ${wait_seconds}s" >&2; \
+        sleep "$wait_seconds"; \
+    done \
+    && rm /tmp/install-hermes.sh
+
+COPY --chown=qsr:qsr autonomy/requirements.txt /opt/qsr/autonomy/requirements.txt
 RUN python3 -m venv /opt/qsr/.venv/mcp \
     && /opt/qsr/.venv/mcp/bin/python -m pip install --upgrade pip \
     && git clone --depth 1 --filter=blob:none --sparse --no-recurse-submodules \
@@ -28,18 +45,9 @@ RUN python3 -m venv /opt/qsr/.venv/mcp \
     && /opt/qsr/.venv/mcp/bin/python -m pip install \
         "/tmp/edge-ai-libraries/frameworks/mcp-service-sdk[mcp]" \
         -r /opt/qsr/autonomy/requirements.txt PyYAML \
-    && rm -rf /tmp/edge-ai-libraries \
-    && mkdir -p /home/qsr/.hermes /home/qsr/.local/state/qsr-agent \
-    && chown -R qsr:qsr /opt/qsr/.venv /home/qsr
+    && rm -rf /tmp/edge-ai-libraries
 
-USER qsr
-RUN curl -fsSL "$HERMES_INSTALL_URL" -o /tmp/install-hermes.sh \
-    && if [ -n "$HERMES_INSTALL_COMMIT" ]; then \
-        bash /tmp/install-hermes.sh --skip-setup --non-interactive --commit "$HERMES_INSTALL_COMMIT"; \
-    else \
-        bash /tmp/install-hermes.sh --skip-setup --non-interactive; \
-    fi \
-    && rm /tmp/install-hermes.sh
+COPY --chown=qsr:qsr . .
 
 EXPOSE 8600
 ENTRYPOINT ["/opt/qsr/.venv/mcp/bin/python", "/opt/qsr/entrypoint.py"]

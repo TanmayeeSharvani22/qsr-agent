@@ -24,9 +24,8 @@ cd qsr-agent
 make up
 ```
 
-On first run, `make up` creates `.env` from `.env.example` if it doesn't exist;
-it never overwrites an existing `.env`. Edit it later to configure remote
-services or other overrides.
+Every `make up` run copies `.env.example` to `.env`, replacing any existing
+`.env`. Edit `.env.example` to configure remote services or other overrides.
 
 `make up` builds the Hermes/operator image and starts it with OVMS through
 Docker Compose. The model must already be present under `MODEL_ROOT/MODEL_ID`;
