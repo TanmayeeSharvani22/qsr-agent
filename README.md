@@ -21,10 +21,14 @@ Git, curl, and approximately 8 GB of free disk.
 ```bash
 git clone https://github.com/intel-retail/qsr-agent.git
 cd qsr-agent
-./scripts/setup.sh
+cp .env.example .env  # edit MODEL_ROOT and optional remote service URLs
+make up
 ```
 
-Setup starts the Operator UI automatically. Open:
+`make up` builds the Hermes/operator image and starts it with OVMS through
+Docker Compose. The model must already be present under `MODEL_ROOT/MODEL_ID`;
+the setup script can still be used for the existing host-based installation.
+Open:
 
 ```text
 http://127.0.0.1:8600
@@ -32,11 +36,17 @@ http://127.0.0.1:8600
 
 The UI provides operator chat, connected-service status, and a right-side
 Automatic Alerts panel for subscribed critical events. To use the CLI instead,
-run `hermes` from the repository.
+run `docker compose exec qsr-agent hermes`.
 
 ```bash
-.venv/mcp/bin/python operator-ui/app.py  # serves on http://<host>:8600
+make logs
+make status
+make down
 ```
+
+Set `QSR_SAD_MCP_URL` to the routable MCP URL, for example
+`http://10.0.0.25:9000/mcp`. Set `QSR_CALLBACK_URL` to a URL the SAD host can
+reach, for example `http://<qsr-host-ip>:8600/notifications`.
 
 The UI also hosts a generic autonomy webhook. Hermes selects relevant skills
 and MCP reads for incoming events; resulting actions wait for approval in the
