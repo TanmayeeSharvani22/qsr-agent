@@ -71,9 +71,11 @@ SAD MCP, callback URLs, or other overrides. Edits made directly to `.env` are
 lost.
 
 `make up` validates Docker, Intel render-device access, and the existing model,
-builds the agent image, then runs `docker compose up -d`. Download the model
-first with `make download-models` (it fetches `OpenVINO/Qwen3-8B-int4-ov` into
-`./models`). Useful commands:
+then runs `docker compose up -d`. By default it pulls the pre-built image from
+the registry (`REGISTRY=true`); use `make up REGISTRY=false` to build from source
+instead. Override the image with `REGISTRY_URL` and `TAG` (default
+`intel/qsr-agent:latest`). Download the model first with `make download-models`
+(it fetches `OpenVINO/Qwen3-8B-int4-ov` into `./models`). Useful commands:
 
 ```bash
 make download-models

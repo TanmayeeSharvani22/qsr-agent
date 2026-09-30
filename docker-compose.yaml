@@ -1,6 +1,6 @@
 services:
   ovms:
-    image: ${OVMS_IMAGE:-openvino/model_server@sha256:2a52cd2bc62d984f35f12b1cf58bb5dffe5f5d57b6ef3349b1b37229a768806b}
+    image: openvino/model_server:${OVMS_IMAGE_TAG:-2026.2-gpu}    
     command:
       - --rest_port
       - "8000"
@@ -29,6 +29,7 @@ services:
       - qsr
 
   qsr-agent:
+    image: ${QSR_IMAGE:-intel/qsr-agent:latest}
     build:
       context: .
       dockerfile: Dockerfile
