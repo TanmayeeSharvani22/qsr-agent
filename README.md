@@ -21,10 +21,18 @@ Git, curl, and approximately 8 GB of free disk.
 ```bash
 git clone https://github.com/intel-retail/qsr-agent.git
 cd qsr-agent
-./scripts/setup.sh
+make up
 ```
 
-Setup starts the Operator UI automatically. Open:
+Every `make up` run copies `.env.example` to `.env`, replacing any existing
+`.env`. Edit `.env.example` to configure remote services or other overrides.
+
+`make up` starts the Hermes/operator image with OVMS through Docker Compose. By
+default it **pulls** the pre-built image from the registry (`REGISTRY=true`); run
+`make up REGISTRY=false` to **build from source**. Override the image reference
+with `REGISTRY_URL` and `TAG` (default `intel/qsr-agent:latest`). The model must
+already be present under `MODEL_ROOT/MODEL_ID`; the setup script can still be used
+for the existing host-based installation. Open:
 
 ```text
 http://127.0.0.1:8600
@@ -32,11 +40,18 @@ http://127.0.0.1:8600
 
 The UI provides operator chat, connected-service status, and a right-side
 Automatic Alerts panel for subscribed critical events. To use the CLI instead,
-run `hermes` from the repository.
+run `docker compose exec qsr-agent hermes`.
 
 ```bash
-.venv/mcp/bin/python operator-ui/app.py  # serves on http://<host>:8600
+make logs
+make status
+make down
 ```
+
+Register remote services in `agent-config/hermes/remote-mcp.example.yaml`, setting
+each `url` to a routable MCP address, for example `http://10.0.0.25:9000/mcp`. Set
+`QSR_CALLBACK_URL` to a URL the service host can reach, for example
+`http://<qsr-host-ip>:8600/notifications`.
 
 The UI also hosts a generic autonomy webhook. Hermes selects relevant skills
 and MCP reads for incoming events; resulting actions wait for approval in the

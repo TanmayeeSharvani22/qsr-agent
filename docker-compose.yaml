@@ -1,0 +1,96 @@
+services:
+  ovms:
+    image: openvino/model_server:${OVMS_IMAGE_TAG:-2026.2-gpu}
+    command:
+      - --rest_port
+      - "8000"
+      - --model_repository_path
+      - /models
+      - --source_model
+      - ${MODEL_ID:-OpenVINO/Qwen3-8B-int4-ov}
+      - --target_device
+      - GPU
+      - --tool_parser
+      - hermes3
+      - --task
+      - text_generation
+    ports:
+      - "127.0.0.1:${OVMS_PORT:-4444}:8000"
+    volumes:
+      # Writable: OVMS writes graph.pbtxt next to the model on startup.
+      - ${MODEL_ROOT:-./models}:/models
+    devices:
+      - /dev/dri:/dev/dri
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    group_add:
+      - "${RENDER_GID:-992}"
+    restart: unless-stopped
+    networks:
+      - qsr
+
+  qsr-agent:
+    image: ${QSR_IMAGE:-intel/qsr-agent:latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SDK_REPO: ${SDK_REPO:-https://github.com/sachinkaushik/edge-ai-libraries.git}
+        SDK_REF: ${SDK_REF:-mcp}
+        HERMES_INSTALL_URL: ${HERMES_INSTALL_URL:-https://hermes-agent.nousresearch.com/install.sh}
+        HERMES_INSTALL_COMMIT: ${HERMES_INSTALL_COMMIT:-}
+    depends_on:
+      - ovms
+    environment:
+      MODEL_ID: ${MODEL_ID:-OpenVINO/Qwen3-8B-int4-ov}
+      QSR_MODEL_BASE_URL: http://ovms:8000/v3
+      QSR_ADVISOR_BASE_URL: http://ovms:8000/v3
+      QSR_CALLBACK_URL: ${QSR_CALLBACK_URL:-}
+      QSR_UI_HOST: 0.0.0.0
+      QSR_UI_PORT: "8600"
+      HERMES_BIN: /home/qsr/.local/bin/hermes
+      HERMES_CONFIG: /home/qsr/.hermes/config.yaml
+      HERMES_TIMEOUT: ${HERMES_TIMEOUT:-300}
+      QSR_AUTONOMY_DB: /home/qsr/.local/state/qsr-agent/autonomy.db
+      QSR_MCP_PYTHON: /opt/qsr/.venv/mcp/bin/python
+      QSR_MCP_SUBSCRIPTIONS: "[]"
+      SAD_TIMEZONE: ${SAD_TIMEZONE:-Asia/Kolkata}
+      # Bypass the corporate proxy for loopback, the compose network, and LAN
+      # ranges — remote MCP services (e.g. SAD on a 10.x host) are reached direct.
+      NO_PROXY: localhost,127.0.0.1,::1,ovms,host.docker.internal,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,.intel.com
+      no_proxy: localhost,127.0.0.1,::1,ovms,host.docker.internal,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,.intel.com
+    ports:
+      - "${QSR_UI_HOST:-0.0.0.0}:${QSR_UI_PORT:-8600}:8600"
+    volumes:
+      # Live service catalog: edit agent-config/hermes/*.yaml then `make restart`.
+      - ./agent-config:/opt/qsr/agent-config:ro
+      # Live skills: edit qsr-skills/*/SKILL.md then `make restart`.
+      - ./qsr-skills:/opt/qsr/qsr-skills:ro
+      # ~/.hermes holds the Hermes binary and is baked into the image; config is
+      # regenerated each start, so it is intentionally not a volume (a stale empty
+      # volume would shadow the binary).
+      - autonomy-state:/home/qsr/.local/state/qsr-agent
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    init: true
+    restart: unless-stopped
+    healthcheck:
+      # /ready returns 200 only after warm-up completes, so the container is
+      # marked healthy once the first query will be fast.
+      test:
+        - CMD
+        - /opt/qsr/.venv/mcp/bin/python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8600/ready', timeout=3)
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 240s
+    networks:
+      - qsr
+
+volumes:
+  autonomy-state:
+
+networks:
+  qsr:
+    driver: bridge

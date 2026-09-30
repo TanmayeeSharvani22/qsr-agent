@@ -5,9 +5,9 @@
 [Add a service](adding-a-service.md)
 
 This procedure reproduces the validated stack on a Linux x86-64 machine with
-an Intel GPU. Hermes and the QSR simulations run on the host; OVMS runs in
-Docker. The simulation Dockerfile is optional and runs MCP services only, not
-Hermes.
+an Intel GPU. The containerized path runs Hermes, the operator UI, local MCP
+simulations, and OVMS through Docker Compose. The legacy host setup remains
+available through `scripts/setup.sh`.
 
 ## 1. Prerequisites
 
@@ -52,25 +52,81 @@ export https_proxy="$HTTPS_PROXY"
 export no_proxy="$NO_PROXY"
 ```
 
-If TLS is intercepted, set `NODE_EXTRA_CA_CERTS` to the organization's trusted
-PEM certificate. Configure the Docker daemon's proxy separately if `docker
-pull` cannot reach Docker Hub. Do not disable TLS verification.
+If TLS is intercepted, configure the system or Docker daemon to trust the
+organization's proxy CA; do not disable TLS verification. The image build needs
+network access to the Hermes installer, SDK repository, and Python package
+indexes.
 
 ## 2. Run setup
 
 ```bash
 git clone https://github.com/intel-retail/qsr-agent.git
 cd qsr-agent
-./scripts/setup.sh
+make up
 ```
 
-The script is idempotent and performs these operations:
+Every `make up` run copies `.env.example` to `.env`, replacing any existing
+`.env`. The example uses a repo-local `./models`; edit `.env.example` for remote
+SAD MCP, callback URLs, or other overrides. Edits made directly to `.env` are
+lost.
+
+`make up` validates Docker, Intel render-device access, and the existing model,
+then runs `docker compose up -d`. By default it pulls the pre-built image from
+the registry (`REGISTRY=true`); use `make up REGISTRY=false` to build from source
+instead. Override the image with `REGISTRY_URL` and `TAG` (default
+`intel/qsr-agent:latest`). Download the model first with `make download-models`
+(it fetches `OpenVINO/Qwen3-8B-int4-ov` into `./models`). Useful commands:
+
+```bash
+make download-models
+make logs
+make status
+make down
+```
+
+### Image source (pull vs build)
+
+`make up` and `make build` select the agent image with these variables:
+
+| Variable | Default | Effect |
+|---|---|---|
+| `REGISTRY` | `true` | `true` pulls the pre-built image; `false` builds from source. |
+| `REGISTRY_URL` | `intel/` | Registry/namespace prefix for the image. |
+| `TAG` | `latest` | Image tag. |
+
+The image reference is `${REGISTRY_URL}qsr-agent:${TAG}` (default
+`intel/qsr-agent:latest`).
+
+```bash
+make up                                            # pull the pre-built image (default)
+make up REGISTRY=false                             # build from source instead
+make up REGISTRY_URL=myreg.io/team/ TAG=2026.2.0   # custom registry/tag
+```
+
+Use `REGISTRY=false` until the image has been published to the registry.
+
+The agent image installs Hermes and the MCP service dependencies at build time.
+Hermes configuration/history and autonomy proposals are persisted in named
+volumes. OVMS mounts `MODEL_ROOT` read-only and is available to the agent at
+`http://ovms:8000/v3` inside the Compose network.
+
+Register services in `agent-config/hermes/remote-mcp.example.yaml`, setting each
+`url` to an address reachable from the QSR container. For push subscriptions,
+add them to `agent-config/hermes/subscribe-events.yaml`; set `QSR_CALLBACK_URL`
+to an address reachable from the service host/container when the per-subscription
+callback default does not apply. A loopback URL on either machine will not reach
+the other.
+
+### Legacy host setup
+
+`./scripts/setup.sh` remains available for installing Hermes and running the UI
+on the host. It is idempotent and performs these operations:
 
 1. Validates Linux, Python, Docker, and `/dev/dri` access.
 2. Installs Hermes with its official installer when `hermes` is absent.
 3. Installs model/YAML helpers in `.venv/qsr-setup`; when venv support is
   unavailable, it uses an isolated `.venv/qsr-setup-target` directory.
-4. Downloads `OpenVINO/Qwen3-8B-int4-ov` to `$HOME/models`.
+4. Downloads `OpenVINO/Qwen3-8B-int4-ov` to `<repo>/models`.
 5. Pulls the OVMS GPU image and starts `ovms-qwen3-8b` on loopback port 8000.
 6. Backs up and merges `~/.hermes/config.yaml`; unrelated settings survive.
 7. Registers Kiosk and Order Accuracy as local stdio MCP servers.
@@ -188,7 +244,7 @@ Restart an interactive Hermes process after any configuration or skill change.
 The setup script runs the equivalent of this validated command:
 
 ```bash
-MODEL_ROOT="$HOME/models"
+MODEL_ROOT="$PWD/models"
 MODEL_ID=OpenVINO/Qwen3-8B-int4-ov
 RENDER_NODE=$(find /dev/dri -maxdepth 1 -name 'renderD*' -print -quit)
 RENDER_GROUP=$(stat -c '%g' "$RENDER_NODE")

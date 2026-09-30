@@ -1,4 +1,8 @@
 .venv/
+.env
+models/
+download_models/.venv/
+download_models/.hf_cache/
 tests/mcp-services/__pycache__/
 tests/mcp-services/logs/
 operator-ui/__pycache__/app.cpython-312.pyc

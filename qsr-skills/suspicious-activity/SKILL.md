@@ -39,13 +39,21 @@ runtime action tools.
 | Which zones have activity | List distinct zones with recorded activity | returned zone list | List the zones exactly as returned; do not invent zones. |
 | All events / recent violations | List suspicious-activity event records | `zone`, `pose`, `severity`, `description`, `ts_ms` | Summarize count first, then notable events; keep severity and zone with each. |
 | Events in a specific zone | Filter event records by zone | `zone`, `pose`, `severity`, `description` | Filter to the named zone; state the count and severities present. |
-| Dropped-and-returned food ("dropped on the floor and put back") | Retrieve or aggregate kitchen food-safety violation records | `event_name` = `food_safety_violation`, `use_case` = `kitchen`, `zone`, `station`, `camera_id`, `description` | Count matching events and report station/zone/camera from returned fields. |
+| Dropped-and-returned food, or an object picked up / grasped / lifted from the floor ("dropped on the floor and put back", "picked up from the floor") | Retrieve or aggregate kitchen food-safety violation records | `event_name` = `food_safety_violation`, `use_case` = `kitchen`, `zone` = `kitchen-prep` | Filter by these structured fields; do NOT put the sentence in the free-text `query`. Count matching events and report zone/description/timestamps from returned fields. |
 | How often / which station | Aggregate or list events by station, zone, or camera | group by `station` / `zone` / `camera_id` | Count matching events per returned station, zone, or camera; do not fabricate stations without evidence. |
 | Events in a time range | Filter event records using a time range | zone and time-bound fields from the live schema | Preserve the supplied time bounds; state the window used and the count. |
 | Severity questions (how many high) | Retrieve event records that include severity | `severity` in {low, medium, high} | Count by the exact `severity` value; do not reinterpret severity. |
 | Any other food-safety analysis | Best compatible read capability | all relevant returned fields | Call once, reason over the result, show brief counts, and state missing evidence instead of guessing. |
 
 ## Complex Questions
+
+Prefer structured filters (`zone`, `event_name`, `use_case`, time range) over the
+free-text `query` parameter. The service's text search is literal and
+conjunctive: every non-trivial word in `query` must appear verbatim in the stored
+event, so a natural-language sentence (e.g. "object picked up from the floor")
+usually matches nothing even when relevant events exist. Map the request to the
+structured fields above and pass `query` only as a single distinctive keyword, or
+omit it entirely.
 
 For trends, per-station frequency, comparisons, or open-ended questions, call the
 narrowest read tool that returns the needed events, then reason over that result.
