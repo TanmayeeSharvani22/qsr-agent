@@ -14,6 +14,16 @@ services:
       - hermes3
       - --task
       - text_generation
+      # Latency tuning (mirrors SAD's validated export options, applied here as
+      # OVMS runtime flags since the model is already converted): cache the
+      # shared prompt prefix, give the KV cache headroom, and optimize for a
+      # single operator.
+      - --enable_prefix_caching
+      - "true"
+      - --cache_size
+      - "4"
+      - --max_num_seqs
+      - "1"
     ports:
       - "127.0.0.1:${OVMS_PORT:-4444}:8000"
     volumes:
