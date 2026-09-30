@@ -27,10 +27,12 @@ make up
 Every `make up` run copies `.env.example` to `.env`, replacing any existing
 `.env`. Edit `.env.example` to configure remote services or other overrides.
 
-`make up` builds the Hermes/operator image and starts it with OVMS through
-Docker Compose. The model must already be present under `MODEL_ROOT/MODEL_ID`;
-the setup script can still be used for the existing host-based installation.
-Open:
+`make up` starts the Hermes/operator image with OVMS through Docker Compose. By
+default it **pulls** the pre-built image from the registry (`REGISTRY=true`); run
+`make up REGISTRY=false` to **build from source**. Override the image reference
+with `REGISTRY_URL` and `TAG` (default `intel/qsr-agent:latest`). The model must
+already be present under `MODEL_ROOT/MODEL_ID`; the setup script can still be used
+for the existing host-based installation. Open:
 
 ```text
 http://127.0.0.1:8600

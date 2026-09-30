@@ -84,6 +84,27 @@ make status
 make down
 ```
 
+### Image source (pull vs build)
+
+`make up` and `make build` select the agent image with these variables:
+
+| Variable | Default | Effect |
+|---|---|---|
+| `REGISTRY` | `true` | `true` pulls the pre-built image; `false` builds from source. |
+| `REGISTRY_URL` | `intel/` | Registry/namespace prefix for the image. |
+| `TAG` | `latest` | Image tag. |
+
+The image reference is `${REGISTRY_URL}qsr-agent:${TAG}` (default
+`intel/qsr-agent:latest`).
+
+```bash
+make up                                            # pull the pre-built image (default)
+make up REGISTRY=false                             # build from source instead
+make up REGISTRY_URL=myreg.io/team/ TAG=2026.2.0   # custom registry/tag
+```
+
+Use `REGISTRY=false` until the image has been published to the registry.
+
 The agent image installs Hermes and the MCP service dependencies at build time.
 Hermes configuration/history and autonomy proposals are persisted in named
 volumes. OVMS mounts `MODEL_ROOT` read-only and is available to the agent at

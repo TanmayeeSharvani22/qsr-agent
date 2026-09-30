@@ -74,15 +74,17 @@ services:
     init: true
     restart: unless-stopped
     healthcheck:
+      # /ready returns 200 only after warm-up completes, so the container is
+      # marked healthy once the first query will be fast.
       test:
         - CMD
         - /opt/qsr/.venv/mcp/bin/python
         - -c
-        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8600/health', timeout=3)
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8600/ready', timeout=3)
       interval: 15s
       timeout: 5s
       retries: 5
-      start_period: 20s
+      start_period: 240s
     networks:
       - qsr
 

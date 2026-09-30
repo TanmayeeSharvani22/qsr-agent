@@ -54,6 +54,10 @@ HERMES_RESPONSE_STYLE = os.environ.get(
 HERMES_IDLE_DONE_SECONDS = float(os.environ.get("HERMES_IDLE_DONE_SECONDS", "3"))
 WARMUP_ENABLED = os.environ.get("QSR_WARMUP", "true").strip().lower() not in {"0", "false", "no"}
 WARMUP_PROMPT = os.environ.get("QSR_WARMUP_PROMPT", "Warm up. Reply with OK only.")
+# Set once warm-up concludes; /ready (and the container healthcheck) gates on it.
+WARMUP_DONE = threading.Event()
+if not WARMUP_ENABLED:
+    WARMUP_DONE.set()
 try:
     MCP_SUBSCRIPTIONS: list[dict] = json.loads(os.environ.get("QSR_MCP_SUBSCRIPTIONS", "[]"))
 except json.JSONDecodeError:
@@ -386,6 +390,11 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, _INDEX_PATH.read_bytes(), "text/html; charset=utf-8")
         elif self.path == "/health":
             self._send(200, b'{"status":"ok"}', "application/json")
+        elif self.path == "/ready":
+            if WARMUP_DONE.is_set():
+                self._send(200, b'{"status":"ready"}', "application/json")
+            else:
+                self._send(503, b'{"status":"warming"}', "application/json")
         elif self.path == "/servers":
             body = json.dumps(list_servers()).encode("utf-8")
             self._send(200, body, "application/json")
@@ -543,17 +552,20 @@ class Handler(BaseHTTPRequestHandler):
 def _warm_up() -> None:
     """Fire one throwaway turn so OVMS compiles the model graph and Hermes
     initializes before the first operator query. Retries until OVMS is ready."""
-    for attempt in range(1, 6):
-        start = time.monotonic()
-        result = ask_hermes(WARMUP_PROMPT)
-        elapsed = time.monotonic() - start
-        if result.get("ok"):
-            print(f"[QSR UI] Warm-up complete in {elapsed:.0f}s (attempt {attempt})", flush=True)
-            return
-        print(f"[QSR UI] Warm-up attempt {attempt} failed in {elapsed:.0f}s: "
-              f"{str(result.get('error', ''))[:120]}", flush=True)
-        time.sleep(10)
-    print("[QSR UI] Warm-up gave up; the first query will pay the compile cost.", flush=True)
+    try:
+        for attempt in range(1, 6):
+            start = time.monotonic()
+            result = ask_hermes(WARMUP_PROMPT)
+            elapsed = time.monotonic() - start
+            if result.get("ok"):
+                print(f"[QSR UI] Warm-up complete in {elapsed:.0f}s (attempt {attempt})", flush=True)
+                return
+            print(f"[QSR UI] Warm-up attempt {attempt} failed in {elapsed:.0f}s: "
+                  f"{str(result.get('error', ''))[:120]}", flush=True)
+            time.sleep(10)
+        print("[QSR UI] Warm-up gave up; the first query will pay the compile cost.", flush=True)
+    finally:
+        WARMUP_DONE.set()
 
 
 def main() -> None:
