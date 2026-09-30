@@ -1,6 +1,6 @@
 services:
   ovms:
-    image: openvino/model_server:${OVMS_IMAGE_TAG:-2026.2-gpu}    
+    image: openvino/model_server:${OVMS_IMAGE_TAG:-2026.2-gpu}
     command:
       - --rest_port
       - "8000"
@@ -65,7 +65,9 @@ services:
       - ./agent-config:/opt/qsr/agent-config:ro
       # Live skills: edit qsr-skills/*/SKILL.md then `make restart`.
       - ./qsr-skills:/opt/qsr/qsr-skills:ro
-      - hermes-home:/home/qsr/.hermes
+      # ~/.hermes holds the Hermes binary and is baked into the image; config is
+      # regenerated each start, so it is intentionally not a volume (a stale empty
+      # volume would shadow the binary).
       - autonomy-state:/home/qsr/.local/state/qsr-agent
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -85,7 +87,6 @@ services:
       - qsr
 
 volumes:
-  hermes-home:
   autonomy-state:
 
 networks:

@@ -78,8 +78,10 @@ WORKDIR /opt/qsr
 USER qsr
 
 # Hermes CLI + standalone runtime and the MCP venv, built in the builder stage.
-# .hermes and the state dir are compose volumes, so they are not baked in here.
+# ~/.hermes holds the actual hermes binary and seeds the hermes-home volume on
+# first run, so it must be baked in; ~/.local has the launcher on PATH.
 COPY --from=builder --chown=qsr:qsr /home/qsr/.local /home/qsr/.local
+COPY --from=builder --chown=qsr:qsr /home/qsr/.hermes /home/qsr/.hermes
 COPY --from=builder --chown=qsr:qsr /opt/qsr/.venv /opt/qsr/.venv
 
 COPY --chown=qsr:qsr . .

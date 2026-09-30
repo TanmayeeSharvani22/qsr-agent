@@ -15,6 +15,7 @@ Environment:
     HERMES_REASONING reasoning effort per turn (default low)
     QSR_AUTONOMY_DB persistent proposal database
     QSR_MCP_SUBSCRIPTIONS  JSON list of remote MCP subscriptions to register
+    QSR_WARMUP    run one background warm-up turn at startup (default true)
 """
 
 from __future__ import annotations
@@ -51,6 +52,8 @@ HERMES_RESPONSE_STYLE = os.environ.get(
     "Use the relevant tool before answering factual or numeric questions. Do not estimate missing values. Answer in one short sentence unless the user explicitly asks for detail.",
 )
 HERMES_IDLE_DONE_SECONDS = float(os.environ.get("HERMES_IDLE_DONE_SECONDS", "3"))
+WARMUP_ENABLED = os.environ.get("QSR_WARMUP", "true").strip().lower() not in {"0", "false", "no"}
+WARMUP_PROMPT = os.environ.get("QSR_WARMUP_PROMPT", "Warm up. Reply with OK only.")
 try:
     MCP_SUBSCRIPTIONS: list[dict] = json.loads(os.environ.get("QSR_MCP_SUBSCRIPTIONS", "[]"))
 except json.JSONDecodeError:
@@ -537,12 +540,30 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
 
+def _warm_up() -> None:
+    """Fire one throwaway turn so OVMS compiles the model graph and Hermes
+    initializes before the first operator query. Retries until OVMS is ready."""
+    for attempt in range(1, 6):
+        start = time.monotonic()
+        result = ask_hermes(WARMUP_PROMPT)
+        elapsed = time.monotonic() - start
+        if result.get("ok"):
+            print(f"[QSR UI] Warm-up complete in {elapsed:.0f}s (attempt {attempt})", flush=True)
+            return
+        print(f"[QSR UI] Warm-up attempt {attempt} failed in {elapsed:.0f}s: "
+              f"{str(result.get('error', ''))[:120]}", flush=True)
+        time.sleep(10)
+    print("[QSR UI] Warm-up gave up; the first query will pay the compile cost.", flush=True)
+
+
 def main() -> None:
     if not _resolve_hermes():
         print(f"WARNING: hermes not found at {HERMES_BIN} or on PATH")
     threading.Thread(target=subscription_registration_loop, name="mcp-subscriptions", daemon=True).start()
     server = ThreadingHTTPServer((HOST, PORT), Handler)
     print(f"Operator UI on http://{HOST}:{PORT}  (Ctrl-C to stop)")
+    if WARMUP_ENABLED:
+        threading.Thread(target=_warm_up, name="warmup", daemon=True).start()
     try:
         AUTONOMY.start()
         server.serve_forever()
