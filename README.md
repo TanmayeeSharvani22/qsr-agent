@@ -64,6 +64,20 @@ availability and order-remake proposals. Extensions add capabilities and skills,
 not event policies. The application validates model-selected reads and proposed
 actions, and records no-action reasons when intervention is not justified.
 
+Weather comes from the
+[weather-simulator](https://github.com/unarayan/weather-simulator) MCP service,
+built from `WEATHER_SERVICE_DIR` (default `../weather-simulator`; clone it there
+first) and run as the compose `weather` service. Set demo weather, which also
+sends a `weather_changed` event to the autonomy webhook:
+
+```bash
+make weather CONDITION=rain TEMP=12        # clear|cloudy|fog|drizzle|rain|storm|snow
+make weather CONDITION=clear NO_EVENT=1    # change silently
+```
+
+Behind a corporate proxy, export `http_proxy`, `https_proxy`, and `no_proxy`
+before `make up`; they are passed to image builds and containers.
+
 If you kept the default LAN binding, open `http://<host>:8600` from your
 browser. If you set `QSR_UI_HOST=127.0.0.1`, forward the port first when the
 agent is on a remote box:

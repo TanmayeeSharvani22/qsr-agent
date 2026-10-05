@@ -40,8 +40,9 @@ curl -sS -X POST http://127.0.0.1:8600/autonomy/events \
    }'
 ```
 
-Hermes receives the weather event plus current queue, staffing, demand, and menu
-state. It may recommend adding warm items such as `hot-chocolate` or `tea`,
+Hermes receives the weather event, current queue, staffing, demand, and menu
+state from the kiosk service, and current weather from the weather MCP service.
+It may recommend adding warm items such as `hot-chocolate` or `tea`,
 restoring an item after weather clears, or making no change. Recommendations are
 limited to exact live menu IDs and do not call `change_menu_items` until an
 operator approves the proposal.
@@ -49,6 +50,12 @@ operator approves the proposal.
 The operator UI displays the latest received weather event. It does not create
 weather or run a polling loop. The event producer is responsible for detecting
 weather changes, assigning unique event IDs, and retrying delivery failures.
+The [weather-simulator](https://github.com/unarayan/weather-simulator) service
+is that producer for demos: run it with
+`WEATHER_EVENT_WEBHOOK_URL=http://127.0.0.1:8600/autonomy/events` and
+`weather-simulator serve --transport http --port 8090`, then change weather with
+`weather-simulator set rain --temperature 12`. Autonomy reads it at
+`QSR_WEATHER_MCP_URL` and Hermes registers it as the `weather` MCP server.
 
 ### Queue event
 
@@ -148,8 +155,8 @@ item alone is not evidence that it can be restored after queue recovery.
   Hermes's proposed changes, verify nothing changed while pending, approve in
   the UI, and read the menu again to verify the approved availability.
 - Queue recovery: hide Vanilla Shake with a temporary queue-pressure reason.
-  Start the operator server with `QSR_QUEUE_COUNT=0`,
-  `QSR_ESTIMATED_WAIT_MINUTES=0`, and `QSR_WEATHER_CONDITION=clear`; send a queue
+  Start the operator server with `QSR_QUEUE_COUNT=0` and
+  `QSR_ESTIMATED_WAIT_MINUTES=0`, run `weather-simulator set clear --no-event`, and send a queue
   event with `queue_count: 0` and `previous_queue_count: 20`. The service reason
   allows Hermes to choose the item without an item ID in the event. Reject a
   proposal and verify no state change; use a fresh event to test approval.
@@ -161,8 +168,8 @@ These are model-driven scenarios, not guaranteed mappings. Report no-action,
 invalid-output, and timeout outcomes as such; do not inject a proposal to make
 a test pass. Restore pre-test availability and remove temporary environment
 overrides when done. Restart the operator server after changing its environment.
-The original kiosk weather simulation alternates every 30 seconds and its
-default queue is seven, so unconfigured snapshots can conflict with test events.
+Kiosk's default queue is seven and the weather service keeps its last set
+weather, so unconfigured snapshots can conflict with test events.
 
 ## Configuration
 
@@ -182,7 +189,7 @@ default queue is seven, so unconfigured snapshots can conflict with test events.
 | `QSR_KIOSK_STATE` | `~/.local/state/qsr-agent/kiosk-state.json` | Persistent placeholder menu state |
 | `QSR_QUEUE_COUNT` | `7` | Placeholder queue override, nonnegative integer |
 | `QSR_ESTIMATED_WAIT_MINUTES` | `6` | Placeholder wait override, nonnegative integer minutes |
-| `QSR_WEATHER_CONDITION` | alternating | Placeholder weather-condition override |
+| `QSR_WEATHER_MCP_URL` | `http://127.0.0.1:8090/mcp` | Weather MCP service (Streamable HTTP); empty disables weather reads |
 
 Model/provider settings come from the working user Hermes configuration.
 The runner does not apply `QSR_ADVISOR_MODEL`, `QSR_ADVISOR_BASE_URL`, or
