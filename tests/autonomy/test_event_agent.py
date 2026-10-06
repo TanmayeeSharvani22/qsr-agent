@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import importlib.util
+import sys
 import tempfile
 import threading
 import time
@@ -14,7 +15,7 @@ from unittest.mock import patch
 
 from autonomy.advisor import HermesRunner
 from autonomy.event_agent import Capability, CapabilityCatalog, HermesEventAgent, Skill, StaleContextError, parse_event_response
-from autonomy.mcp import HttpMcpClient
+from autonomy.mcp import HttpMcpClient, StdioMcpClient
 from autonomy.registry import AutonomyRegistry
 from autonomy.service_capabilities import register_defaults, validate_menu, validate_remake
 from autonomy.store import ProposalStore
@@ -575,6 +576,23 @@ class EventAgentTests(unittest.TestCase):
     def test_http_mcp_client_reports_unavailable_service(self):
         with self.assertRaisesRegex(RuntimeError, "unavailable"):
             HttpMcpClient("http://127.0.0.1:9/mcp", timeout=1).list_tools()
+
+    def test_stdio_mcp_client_reads_and_acts_on_fastmcp_service(self):
+        with tempfile.TemporaryDirectory() as directory, patch.dict("os.environ", {
+            "MCP_LOG_DIR": directory, "QSR_KIOSK_STATE": str(Path(directory) / "kiosk.json"),
+        }):
+            client = StdioMcpClient(Path(sys.executable), Path("tests/mcp-services/kiosk_server.py"))
+            self.assertEqual(client.call_tool("get_kiosk_context")["restaurant"]["id"], "qsr-001")
+            result = client.call_tool("change_menu_items", {
+                "changes": [{"item_id": "tea", "available": True, "reason": "Rain"}], "reason": "test"})
+            self.assertEqual((result["executed"], result["gate"]), (True, "automatic"))
+            with self.assertRaisesRegex(RuntimeError, "between one and three"):
+                client.call_tool("change_menu_items", {"changes": [], "reason": "x"})
+
+    def test_stdio_mcp_client_times_out(self):
+        client = StdioMcpClient(Path(sys.executable), Path("tests/mcp-services/kiosk_server.py"), timeout=0.01)
+        with self.assertRaisesRegex(RuntimeError, "timed out"):
+            client.call_tool("get_kiosk_context")
 
 
 if __name__ == "__main__":

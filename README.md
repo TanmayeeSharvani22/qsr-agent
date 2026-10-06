@@ -116,8 +116,7 @@ Model files under `~/models` and the local venvs (`.venv/`) are left in place.
 
 | Path | Purpose |
 |---|---|
-| `mcp-service-sdk` Git dependency | Framework-neutral service contract, logging, policy, delivery, and MCP binding |
-| `tests/mcp-services/` | Runnable Kiosk and Order Accuracy simulations |
+| `tests/mcp-services/` | Runnable Kiosk and Order Accuracy simulations on FastMCP, with a shared policy-gated service base |
 | `qsr-skills/` | Hermes domain routing and interpretation procedures |
 | `agent-config/hermes/` | Local and remote Hermes configuration fragments |
 | `operator-ui/` | Web chat, connected services, and event decision approvals |

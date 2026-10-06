@@ -44,9 +44,8 @@ See [Autonomous decisions](autonomy.md).
 ## Repository Layout
 
 ```text
-mcp-service-sdk (Git package)     Shared service contract and policy library
 tests/mcp-services/
-  service_runtime.py              Transport selection only
+  service_base.py                 FastMCP service contract, policy gate, tool-call log
   service_launcher.py             Chooses one domain service per process
   kiosk_server.py                 Kiosk domain contract and implementation
   order_accuracy_server.py        Accuracy domain contract and implementation

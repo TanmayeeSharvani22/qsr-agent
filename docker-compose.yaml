@@ -89,8 +89,6 @@ services:
       dockerfile: Dockerfile
       args:
         <<: *proxy-build-args
-        SDK_REPO: ${SDK_REPO:-https://github.com/sachinkaushik/edge-ai-libraries.git}
-        SDK_REF: ${SDK_REF:-mcp}
         HERMES_INSTALL_URL: ${HERMES_INSTALL_URL:-https://hermes-agent.nousresearch.com/install.sh}
         HERMES_INSTALL_COMMIT: ${HERMES_INSTALL_COMMIT:-}
     depends_on:

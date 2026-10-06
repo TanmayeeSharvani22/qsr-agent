@@ -11,11 +11,6 @@ OVMS_CONTAINER=${OVMS_CONTAINER:-ovms-qwen3-8b}
 OVMS_PORT=${OVMS_PORT:-4444}
 HERMES_CONFIG=${HERMES_CONFIG:-"$HOME/.hermes/config.yaml"}
 HERMES_INSTALL_URL=${HERMES_INSTALL_URL:-https://hermes-agent.nousresearch.com/install.sh}
-# The SDK is always installed from Git (no local-checkout dependency).
-SDK_GIT_URL=${SDK_GIT_URL:-https://github.com/sachinkaushik/edge-ai-libraries.git}
-SDK_GIT_REF=${SDK_GIT_REF:-mcp}
-SDK_SUBDIR=${SDK_SUBDIR:-frameworks/mcp-service-sdk}
-SDK_INSTALL_DIR=""
 # Optional: pin Hermes to a validated commit (full 40-char SHA). The installer
 # tracks `main` by default, and newer builds have changed behavior (e.g. a
 # >=64K context-window requirement). Set this to the SHA the stack was
@@ -23,12 +18,8 @@ SDK_INSTALL_DIR=""
 HERMES_INSTALL_COMMIT=${HERMES_INSTALL_COMMIT:-}
 SETUP_VENV=${SETUP_VENV:-"$ROOT_DIR/.venv/qsr-setup"}
 SETUP_TARGET=${SETUP_TARGET:-"$ROOT_DIR/.venv/qsr-setup-target"}
-# NOTE: we intentionally do NOT use `pip install git+...#subdirectory=...`. pip
-# would run `git submodule update --init --recursive` and pull the entire
-# edge-ai-libraries submodule tree (anomalib, flann, geti, ...), stalling setup.
-# resolve_sdk_dir clones only the SDK subdirectory (sparse, no submodules).
-# Dedicated venv whose interpreter launches the kiosk/order-accuracy MCP servers.
-# Hermes runs those as subprocesses, so their launcher must have mcp-service-sdk.
+# Dedicated venv whose interpreter launches the FastMCP kiosk/order-accuracy
+# MCP servers and the operator UI (autonomy). Hermes runs the servers as subprocesses.
 MCP_VENV=${MCP_VENV:-"$ROOT_DIR/.venv/mcp"}
 MCP_VENV_PY="$MCP_VENV/bin/python"
 # Operator UI: started automatically at the end of setup. Set START_UI=false to
@@ -43,9 +34,9 @@ WARM_UP_UI=${WARM_UP_UI:-false}
 # restrict to loopback.
 QSR_UI_HOST=${QSR_UI_HOST:-0.0.0.0}
 QSR_UI_PORT=${QSR_UI_PORT:-8600}
-# Weather MCP service (replaces the old kiosk weather placeholder). It uses its
-# own venv because FastMCP pins a newer `mcp` than mcp-service-sdk. Keep the
-# port in sync with the `weather` entry in agent-config/hermes/remote-mcp.example.yaml.
+# Weather MCP service (replaces the old kiosk weather placeholder). It is a
+# separate project with its own venv. Keep the port in sync with the `weather`
+# entry in agent-config/hermes/remote-mcp.example.yaml.
 START_WEATHER=${START_WEATHER:-true}
 WEATHER_SERVICE_DIR=${WEATHER_SERVICE_DIR:-"$ROOT_DIR/../weather-simulator"}
 WEATHER_GIT_URL=${WEATHER_GIT_URL:-https://github.com/unarayan/weather-simulator.git}
@@ -97,9 +88,6 @@ Optional environment variables:
   HERMES_INSTALL_URL  Hermes installer URL
     SETUP_VENV          Helper virtual environment path
     SETUP_TARGET        Fallback isolated dependency path
-    SDK_GIT_URL         Git URL for mcp-service-sdk (default sachinkaushik fork)
-    SDK_GIT_REF         Git ref/branch for mcp-service-sdk (default mcp)
-    SDK_SUBDIR          Repo subdirectory holding the SDK
     MCP_VENV            Venv that launches the sim MCP servers
     START_UI            Auto-start the operator UI after setup (default true)
     WARM_UP_UI          Run one warm-up UI chat request during setup (default false)
@@ -226,46 +214,17 @@ ensure_helper_venv() {
     SETUP_PYTHON="$SETUP_VENV/bin/python"
 }
 
-ensure_test_sdk() {
-    resolve_sdk_dir
-    log "Installing mcp-service-sdk for local service tests from $SDK_INSTALL_DIR"
-    if [[ -n $SETUP_PYTHONPATH ]]; then
-        python3 -m pip install --quiet --upgrade --target "$SETUP_TARGET" "$SDK_INSTALL_DIR[mcp]"
-    else
-        "$SETUP_PYTHON" -m pip install --quiet --upgrade "$SDK_INSTALL_DIR[mcp]"
-    fi
-}
-
-# Fetch the SDK from Git only, without submodules. Installing via pip's
-# `git+...#subdirectory=...` runs `git submodule update --init --recursive`,
-# which clones the whole edge-ai-libraries submodule tree and stalls setup. A
-# shallow, sparse, no-submodule clone of just the SDK subdir is git-only and
-# fast. Cached in SDK_INSTALL_DIR so we clone at most once per run.
-resolve_sdk_dir() {
-    [[ -n $SDK_INSTALL_DIR && -f "$SDK_INSTALL_DIR/pyproject.toml" ]] && return
-    local dest
-    dest=$(mktemp -d)
-    log "Fetching mcp-service-sdk from $SDK_GIT_URL@$SDK_GIT_REF (sparse, no submodules)"
-    git clone --depth 1 --filter=blob:none --sparse --no-recurse-submodules \
-        --branch "$SDK_GIT_REF" "$SDK_GIT_URL" "$dest" >/dev/null 2>&1 ||
-        fail "Could not clone mcp-service-sdk from $SDK_GIT_URL@$SDK_GIT_REF"
-    git -C "$dest" sparse-checkout set "$SDK_SUBDIR" >/dev/null 2>&1 ||
-        fail "Could not sparse-checkout $SDK_SUBDIR"
-    [[ -f "$dest/$SDK_SUBDIR/pyproject.toml" ]] ||
-        fail "Cloned SDK is missing pyproject.toml at $dest/$SDK_SUBDIR"
-    SDK_INSTALL_DIR="$dest/$SDK_SUBDIR"
-}
-
 ensure_mcp_venv() {
     if [[ ! -x "$MCP_VENV_PY" ]]; then
         log "Creating MCP service venv at $MCP_VENV"
         python3 -m venv "$MCP_VENV" || fail "Could not create $MCP_VENV. Install python3-venv."
     fi
     "$MCP_VENV_PY" -m pip install --quiet --upgrade pip
-    resolve_sdk_dir
-    log "Installing mcp-service-sdk into the MCP service venv from $SDK_INSTALL_DIR"
-    "$MCP_VENV_PY" -m pip install --quiet --upgrade "$SDK_INSTALL_DIR[mcp]" -r "$ROOT_DIR/autonomy/requirements.txt" ||
-        fail "Failed to install mcp-service-sdk into $MCP_VENV"
+    log "Installing FastMCP service and autonomy dependencies into $MCP_VENV"
+    "$MCP_VENV_PY" -m pip install --quiet --upgrade \
+        -r "$ROOT_DIR/tests/mcp-services/requirements.txt" \
+        -r "$ROOT_DIR/autonomy/requirements.txt" ||
+        fail "Failed to install MCP service dependencies into $MCP_VENV"
 }
 
 setup_python() {
@@ -454,7 +413,7 @@ current.setdefault("providers", {}).setdefault("custom", {})
 current["providers"]["custom"]["base_url"] = ovms_base_url
 
 # Auto-register the QSR-owned simulation services by convention: every
-# tests/mcp-services/<name>_server.py becomes an MCP server launched by the SDK
+# tests/mcp-services/<name>_server.py becomes an MCP server launched by the MCP
 # venv interpreter. Add a new sim by dropping a *_server.py — no edits here.
 # Entries not managed here (e.g. real apps that self-register via their own
 # `make up`) are preserved because we only touch discovered sim names.

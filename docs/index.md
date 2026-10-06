@@ -16,8 +16,8 @@ Operator -> Hermes -> OVMS/Qwen -> MCP service -> domain system
 
 The repository includes:
 
-- `mcp-service-sdk` as a Git package dependency: framework-neutral service, policy, log, and MCP binding.
-- `tests/mcp-services/`: runnable Kiosk and Order Accuracy simulations.
+- `tests/mcp-services/`: runnable Kiosk and Order Accuracy simulations built on
+  FastMCP, with a shared policy-gated service base (`service_base.py`).
 - `qsr-skills/`: Hermes procedures for domain Q&A and actions.
 - `agent-config/hermes/`: reusable local and remote configuration fragments.
 - `scripts/setup.sh`: repeatable Linux setup and verification.
