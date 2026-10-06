@@ -5,9 +5,37 @@
 
 mcp_servers:
   # Suspicious Activity (kitchen food safety). SAD runs its own MCP service via
-  # `make up` in the storewide-loss-prevention repo (streamable-http on :9000).
+  # `make up` in the storewide-loss-prevention repo (streamable-http on :9000),
+  # deployed remotely at 10.223.22.84.
   suspicious-activity:
-    url: http://127.0.0.1:9000/mcp
+    url: http://10.223.22.84:9000/mcp
+    transport: streamable-http
+    enabled: true
+    
+    connect_timeout: 15
+    timeout: 120
+
+  # Order Accuracy MCP servers on Machine 1 (10.223.23.34). Take-away and
+  # dine-in run as separate streamable-http services on ports 8010/8011.
+  order-accuracy-take-away:
+    url: http://10.223.23.34:8010/mcp
+    transport: streamable-http
+    enabled: true
+    connect_timeout: 15
+    timeout: 120
+
+  order-accuracy-dine-in:
+    url: http://10.223.23.34:8011/mcp
+    transport: streamable-http
+    enabled: true
+    connect_timeout: 15
+    timeout: 120
+
+  # Smart Kiosk Assistant (queue depth, order stats, menu board control).
+  # Runs via `make up` in the voice-enabled-interactions/smart-kiosk-assistant
+  # repo, deployed remotely at 10.223.23.123, streamable-http on :8014.
+  smart-kiosk:
+    url: http://10.223.23.123:8014/mcp
     transport: streamable-http
     enabled: true
     connect_timeout: 15
