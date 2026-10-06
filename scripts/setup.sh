@@ -54,10 +54,6 @@ WEATHER_HOST=${WEATHER_HOST:-127.0.0.1}
 WEATHER_PORT=${WEATHER_PORT:-8090}
 # Set by start_weather_service; empty disables weather reads in autonomy.
 WEATHER_MCP_URL=""
-# YAML is the normal subscription source. QSR_MCP_SUBSCRIPTIONS remains an
-# optional JSON override for CI and generated deployments.
-SUBSCRIBE_EVENTS_FILE=${SUBSCRIBE_EVENTS_FILE:-"$ROOT_DIR/agent-config/hermes/subscribe-events.yaml"}
-QSR_MCP_SUBSCRIPTIONS=${QSR_MCP_SUBSCRIPTIONS:-}
 # Registrations are convention-based, not per-service code: each QSR sim is a
 # tests/mcp-services/<name>_server.py (auto-discovered), and real apps register
 # themselves via their own launch. This script never changes to add a service.
@@ -115,8 +111,6 @@ Optional environment variables:
     WEATHER_GIT_REF     Git ref for WEATHER_GIT_URL (default main)
     WEATHER_HOST        Weather service bind host (default 127.0.0.1)
     WEATHER_PORT        Weather service port (default 8090)
-    SUBSCRIBE_EVENTS_FILE  Event subscription YAML path
-    QSR_MCP_SUBSCRIPTIONS  Optional JSON override for event subscriptions
 EOF
 }
 
@@ -280,53 +274,6 @@ setup_python() {
     else
         "$SETUP_PYTHON" "$@"
     fi
-}
-
-load_event_subscriptions() {
-    if [[ -n "$QSR_MCP_SUBSCRIPTIONS" ]]; then
-        log "Using QSR_MCP_SUBSCRIPTIONS environment override"
-        return
-    fi
-    if [[ ! -f "$SUBSCRIBE_EVENTS_FILE" ]]; then
-        QSR_MCP_SUBSCRIPTIONS='[]'
-        log "No event subscription file at $SUBSCRIBE_EVENTS_FILE; automatic alerts disabled"
-        return
-    fi
-
-    QSR_MCP_SUBSCRIPTIONS=$(SUBSCRIBE_EVENTS_FILE="$SUBSCRIBE_EVENTS_FILE" setup_python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-import yaml
-
-path = Path(os.environ["SUBSCRIBE_EVENTS_FILE"])
-document = yaml.safe_load(path.read_text()) or {}
-subscriptions = document.get("subscriptions", [])
-if not isinstance(subscriptions, list):
-    raise SystemExit(f"{path}: 'subscriptions' must be a list")
-
-required = {"url", "event_type", "callback_url"}
-enabled = []
-for index, subscription in enumerate(subscriptions):
-    if not isinstance(subscription, dict):
-        raise SystemExit(f"{path}: subscription {index} must be a mapping")
-    if not subscription.get("enabled", True):
-        continue
-    missing = sorted(required - subscription.keys())
-    if missing:
-        raise SystemExit(f"{path}: subscription {index} missing {', '.join(missing)}")
-    enabled.append({
-        "url": str(subscription["url"]),
-        "event_type": str(subscription["event_type"]),
-        "condition": str(subscription.get("condition", "*")),
-        "callback_url": str(subscription["callback_url"]),
-    })
-
-print(json.dumps(enabled, separators=(",", ":")))
-PY
-    ) || fail "Could not load event subscriptions from $SUBSCRIBE_EVENTS_FILE"
-    log "Loaded event subscriptions from $SUBSCRIBE_EVENTS_FILE"
 }
 
 install_hermes() {
@@ -683,13 +630,11 @@ start_operator_ui() {
     local probe_host="$QSR_UI_HOST"
     [[ "$probe_host" == "0.0.0.0" ]] && probe_host="127.0.0.1"
     local url="http://$probe_host:$QSR_UI_PORT/health"
-    local pid current_args current_subscriptions current_weather
+    local pid current_args current_weather
     pid=$(cat "$pid_file" 2>/dev/null || true)
     if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
-        current_subscriptions=$(tr '\0' '\n' </proc/"$pid"/environ 2>/dev/null | sed -n 's/^QSR_MCP_SUBSCRIPTIONS=//p' || true)
         current_weather=$(tr '\0' '\n' </proc/"$pid"/environ 2>/dev/null | sed -n 's/^QSR_WEATHER_MCP_URL=//p' || true)
         if curl -fsS --max-time 2 "$url" >/dev/null 2>&1 &&
-            [[ "$current_subscriptions" == "$QSR_MCP_SUBSCRIPTIONS" ]] &&
             [[ "$current_weather" == "$WEATHER_MCP_URL" ]]; then
             log "Operator UI already running (pid $pid, http://$QSR_UI_HOST:$QSR_UI_PORT)"
             return 0
@@ -707,7 +652,6 @@ start_operator_ui() {
     fi
     log "Starting operator UI on http://$QSR_UI_HOST:$QSR_UI_PORT"
     QSR_UI_HOST="$QSR_UI_HOST" QSR_UI_PORT="$QSR_UI_PORT" \
-        QSR_MCP_SUBSCRIPTIONS="$QSR_MCP_SUBSCRIPTIONS" \
         QSR_WEATHER_MCP_URL="$WEATHER_MCP_URL" \
         nohup "$MCP_VENV_PY" -u "$ui" > "$log_file" 2>&1 &
     echo $! > "$pid_file"
@@ -781,7 +725,6 @@ main() {
     fi
     validate_stack
     if [[ $CHECK_ONLY == false ]]; then
-        load_event_subscriptions
         start_operator_ui
         warm_up_operator_ui
     fi

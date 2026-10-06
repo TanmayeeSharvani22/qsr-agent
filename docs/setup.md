@@ -67,7 +67,7 @@ make up
 
 Every `make up` run copies `.env.example` to `.env`, replacing any existing
 `.env`. The example uses a repo-local `./models`; edit `.env.example` for remote
-SAD MCP, callback URLs, or other overrides. Edits made directly to `.env` are
+SAD MCP or other overrides. Edits made directly to `.env` are
 lost.
 
 `make up` validates Docker, Intel render-device access, and the existing model,
@@ -111,11 +111,8 @@ volumes. OVMS mounts `MODEL_ROOT` read-only and is available to the agent at
 `http://ovms:8000/v3` inside the Compose network.
 
 Register services in `agent-config/hermes/remote-mcp.example.yaml`, setting each
-`url` to an address reachable from the QSR container. For push subscriptions,
-add them to `agent-config/hermes/subscribe-events.yaml`; set `QSR_CALLBACK_URL`
-to an address reachable from the service host/container when the per-subscription
-callback default does not apply. A loopback URL on either machine will not reach
-the other.
+`url` to an address reachable from the QSR container. A loopback URL on the
+service machine will not reach the QSR container.
 
 ### Legacy host setup
 
@@ -158,59 +155,6 @@ weather service venv, or `POST http://127.0.0.1:8090/simulator/weather`. Its log
 is `/tmp/qsr-weather-service.log`.
 
 Keep the same overrides when later running `./scripts/setup.sh --check`.
-
-### Automatic event subscriptions
-
-Edit `agent-config/hermes/subscribe-events.yaml` to configure proactive event
-delivery to the Operator UI. Setup validates the enabled entries and loads them
-automatically, so adding a service does not require changing
-`operator-ui/app.py`.
-
-For SAD and QSR running on the same machine, with SAD in Docker and QSR on the
-host:
-
-```yaml
-subscriptions:
-  - name: suspicious-activity-critical
-    enabled: true
-    url: http://127.0.0.1:9000/mcp
-    event_type: report_suspicious_activity
-    condition: severity == critical
-    callback_url: http://host.docker.internal:8600/notifications
-```
-
-Then run `START_UI=true WARM_UP_UI=false ./scripts/setup.sh`.
-
-Here, `url` is used by the host-based QSR UI to reach the published MCP port.
-The callback originates inside the SAD container, so it uses
-`host.docker.internal` to reach port 8600 on the Docker host. On Linux, the SAD
-Compose service must include:
-
-```yaml
-extra_hosts:
-  - "host.docker.internal:host-gateway"
-```
-
-For separate machines, use routable addresses instead:
-
-```yaml
-subscriptions:
-  - name: suspicious-activity-critical
-    enabled: true
-    url: https://sad.example.internal/mcp
-    event_type: report_suspicious_activity
-    condition: severity == critical
-    callback_url: https://qsr-agent.example.internal/notifications
-```
-
-Override `SUBSCRIBE_EVENTS_FILE` to use another YAML file. The
-`QSR_MCP_SUBSCRIPTIONS` JSON environment variable remains available as a
-higher-priority override for CI or generated deployments.
-
-The domain service must expose the SDK `subscribe` contract and use an SDK
-version that dispatches matching events after durable persistence. Restart the
-operator UI after restarting a service so the process-local subscription is
-registered again. Only events emitted after registration are pushed.
 
 ## 3. What Hermes receives
 
@@ -340,9 +284,7 @@ mTLS validation and restrict ingress to the agent host. Merge the shape in
 | `-t order-accuracy` works but normal mode fails | Confirm `tools.tool_search.enabled` is `false` and the domain is in `platform_toolsets.cli`. |
 | MCP is listed but answers are unsupported | Run `hermes mcp test`, then confirm the service observed `tools/call`. |
 | `GET /mcp` returns 400 or 406 | The route exists; Streamable HTTP requires an initialized MCP session. |
-| Automatic Alerts remains at `0` | Check `/tmp/qsr-operator-ui.log` for `Registered subscription`, verify the service exposes `subscribe`, confirm the callback is reachable from the service/container, and generate a new matching event after registration. |
 | Same-host Docker callback fails | Use `host.docker.internal` plus the Linux `host-gateway` mapping; `127.0.0.1` inside a container refers to that container. |
-| Alerts existed before UI startup but do not appear | Subscriptions are forward-only. Query durable history through MCP read tools or generate a new event after registration. |
 | Python has no venv support | Setup automatically uses isolated `pip --target`; install `python3-venv` if the fallback is unavailable. |
 
 ---

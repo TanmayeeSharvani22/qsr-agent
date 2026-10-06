@@ -103,7 +103,6 @@ services:
       MODEL_ID: ${MODEL_ID:-OpenVINO/Qwen3-8B-int4-ov}
       QSR_MODEL_BASE_URL: http://ovms:8000/v3
       QSR_ADVISOR_BASE_URL: http://ovms:8000/v3
-      QSR_CALLBACK_URL: ${QSR_CALLBACK_URL:-}
       QSR_UI_HOST: 0.0.0.0
       QSR_UI_PORT: "8600"
       HERMES_BIN: /home/qsr/.local/bin/hermes
@@ -111,7 +110,6 @@ services:
       HERMES_TIMEOUT: ${HERMES_TIMEOUT:-300}
       QSR_AUTONOMY_DB: /home/qsr/.local/state/qsr-agent/autonomy.db
       QSR_MCP_PYTHON: /opt/qsr/.venv/mcp/bin/python
-      QSR_MCP_SUBSCRIPTIONS: "[]"
       # Used by autonomy reads and the `weather` Hermes MCP registration.
       QSR_WEATHER_MCP_URL: ${QSR_WEATHER_MCP_URL:-http://weather:8090/mcp}
       SAD_TIMEZONE: ${SAD_TIMEZONE:-Asia/Kolkata}
