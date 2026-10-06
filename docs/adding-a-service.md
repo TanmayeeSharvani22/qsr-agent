@@ -6,7 +6,7 @@
 
 Adding a domain requires four things, plus optional autonomy events:
 
-1. Create an MCP service with `mcp-service-sdk`.
+1. Create an MCP service with [FastMCP](https://gofastmcp.com).
 2. Register it in Hermes.
 3. Add its skill file.
 4. Verify discovery and one question.
@@ -17,11 +17,11 @@ for the domain you own.
 
 ## 1. Create the MCP service
 
-From the repository root, install the shared base and create the service file:
+From the repository root, install FastMCP and create the service file:
 
 ```bash
 SERVICE_PYTHON=/absolute/path/to/service/venv/bin/python
-"$SERVICE_PYTHON" -m pip install "mcp-service-sdk[mcp] @ git+https://github.com/sachinkaushik/edge-ai-libraries.git@<tag-or-branch>#subdirectory=libraries/mcp-service-sdk"
+"$SERVICE_PYTHON" -m pip install "fastmcp>=4.0,<5"
 mkdir -p services/inventory
 touch services/inventory/service.py
 ```
@@ -38,14 +38,14 @@ from typing import Any
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
-from mcp_service_sdk import ServiceServer
+from fastmcp import FastMCP
 
 
-service = ServiceServer(service="inventory", store_id="multi-store")
+service = FastMCP("inventory")
 
 
-@service.read_tool(
-  "get_inventory_context",
+@service.tool(
+  name="get_inventory_context",
   description="Return the current inventory for one store.",
 )
 def get_inventory_context(store_id: str) -> dict[str, Any]:
@@ -69,12 +69,16 @@ def get_inventory_context(store_id: str) -> dict[str, Any]:
 
 
 if __name__ == "__main__":
-  service.run()
+  service.run()  # stdio; use service.run("http", host=..., port=...) for remote
 ```
 
-Use `@service.read_tool` for reads. For a tool that changes a source system,
-use `@service.act_tool` with a `GateLevel` and enforce approval in the service,
-not in the skill. See [Architecture](architecture.md#responsibility-boundaries)
+Dict return values are sent as structured content, which the autonomy client
+requires. For a tool that changes a source system, enforce approval in the
+service, not in the skill. The simulated services use
+`tests/mcp-services/service_base.py` for this: `QsrService.act_tool` registers
+an action with a `GateLevel` (`automatic`, `notify`, `needs_approval`,
+`blocked`) and optional rate limit, and every call goes through its
+`PolicyGate`. See [Architecture](architecture.md#responsibility-boundaries)
 for those production rules.
 
 ### Event-producing services

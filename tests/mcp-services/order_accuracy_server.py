@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Simulated Order Accuracy service built on the mcp-service-sdk contract.
+"""Simulated Order Accuracy MCP service built on FastMCP.
 
-Declares the `get_order_accuracy_context` read tool plus gated act tools
-(`request_remake`, `issue_comp`) on a ServiceServer, then serves them over the
-shared stdio transport. Tool names and signatures are stable for any compatible
-MCP client.
+Declares the `get_order_accuracy_context` read tool plus policy-gated action
+tools (`request_remake`, `issue_comp`) with explicit JSON Schemas. Tool names
+and signatures are stable for any compatible MCP client.
 """
 
 from __future__ import annotations
@@ -12,10 +11,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-# Import the runtime first so the shared test transport is available.
-from service_runtime import run_service
-
-from mcp_service_sdk import GateLevel, ServiceConfig, ServiceServer
+from service_base import GateLevel, QsrService
 
 STORE_ID = "qsr-001"
 
@@ -70,11 +66,7 @@ ORDER_ACCURACY_CONTEXT = {
     ],
 }
 
-svc = ServiceServer.from_config(
-    ServiceConfig(
-        service="order-accuracy-placeholder", store_id=STORE_ID, log_backend="memory", metrics="null"
-    )
-)
+svc = QsrService("order-accuracy-placeholder", STORE_ID)
 
 svc.register_event_type(
     "order_mismatch",
@@ -154,7 +146,8 @@ TOOL_SCHEMAS = {
         "additionalProperties": False,
     },
 }
+svc.set_schemas(TOOL_SCHEMAS)
 
 
 if __name__ == "__main__":
-    run_service(svc, "order-accuracy-placeholder", TOOL_SCHEMAS)
+    svc.run()

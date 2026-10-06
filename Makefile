@@ -5,7 +5,6 @@ MODEL_ID ?= OpenVINO/Qwen3-8B-int4-ov
 OVMS_PORT ?= 4444
 QSR_UI_PORT ?= 8600
 QSR_UI_HOST ?= 0.0.0.0
-SDK_REF ?= mcp
 # Image source: REGISTRY=true (default) pulls the pre-built image; REGISTRY=false builds from source.
 TAG ?= latest
 REGISTRY ?= true
@@ -20,7 +19,7 @@ WEATHER_SERVICE_DIR ?= $(CURDIR)/../weather-simulator
 RENDER_DEVICE ?= $(firstword $(wildcard /dev/dri/renderD*))
 RENDER_GID ?= $(shell if [ -n "$(RENDER_DEVICE)" ]; then stat -c '%g' "$(RENDER_DEVICE)"; else echo 992; fi)
 
-export MODEL_ROOT MODEL_ID OVMS_PORT QSR_UI_PORT QSR_UI_HOST SDK_REF
+export MODEL_ROOT MODEL_ID OVMS_PORT QSR_UI_PORT QSR_UI_HOST
 export HERMES_INSTALL_COMMIT QSR_IMAGE TAG
 export HOST_UID HOST_GID RENDER_GID
 export WEATHER_PORT WEATHER_SERVICE_DIR

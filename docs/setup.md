@@ -54,8 +54,7 @@ export no_proxy="$NO_PROXY"
 
 If TLS is intercepted, configure the system or Docker daemon to trust the
 organization's proxy CA; do not disable TLS verification. The image build needs
-network access to the Hermes installer, SDK repository, and Python package
-indexes.
+network access to the Hermes installer and Python package indexes.
 
 ## 2. Run setup
 
@@ -249,7 +248,7 @@ Independent checks:
 ./scripts/setup.sh --check
 hermes mcp test kiosk
 hermes mcp test order-accuracy
-python3 tests/mcp-services/call_tool.py order-accuracy get_order_accuracy_context
+.venv/mcp/bin/python tests/mcp-services/call_tool.py order-accuracy get_order_accuracy_context
 ```
 
 The expected simulated accuracy is 87.5%: 21 accurate of 24 observed in a

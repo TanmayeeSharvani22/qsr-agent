@@ -6,12 +6,10 @@ from __future__ import annotations
 import importlib
 import os
 
-from service_runtime import run_service
-
 
 SERVICES = {
-    "kiosk": ("kiosk_server", "kiosk-placeholder"),
-    "order-accuracy": ("order_accuracy_server", "order-accuracy-placeholder"),
+    "kiosk": "kiosk_server",
+    "order-accuracy": "order_accuracy_server",
 }
 
 
@@ -21,9 +19,7 @@ def main() -> None:
         available = ", ".join(sorted(SERVICES))
         raise ValueError(f"QSR_SERVICE must be one of: {available}")
 
-    module_name, jsonrpc_name = SERVICES[service_name]
-    module = importlib.import_module(module_name)
-    run_service(module.svc, jsonrpc_name, module.TOOL_SCHEMAS)
+    importlib.import_module(SERVICES[service_name]).svc.run()
 
 
 if __name__ == "__main__":

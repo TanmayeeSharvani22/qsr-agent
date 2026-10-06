@@ -3,8 +3,6 @@
 
 FROM python:3.12-slim AS builder
 
-ARG SDK_REPO=https://github.com/sachinkaushik/edge-ai-libraries.git
-ARG SDK_REF=mcp
 ARG HERMES_INSTALL_URL=https://hermes-agent.nousresearch.com/install.sh
 ARG HERMES_INSTALL_COMMIT=
 
@@ -43,15 +41,12 @@ RUN curl -fsSL "$HERMES_INSTALL_URL" -o /tmp/install-hermes.sh \
     && rm /tmp/install-hermes.sh
 
 COPY --chown=qsr:qsr autonomy/requirements.txt /opt/qsr/autonomy/requirements.txt
+COPY --chown=qsr:qsr tests/mcp-services/requirements.txt /opt/qsr/tests/mcp-services/requirements.txt
 RUN python3 -m venv /opt/qsr/.venv/mcp \
     && /opt/qsr/.venv/mcp/bin/python -m pip install --upgrade pip \
-    && git clone --depth 1 --filter=blob:none --sparse --no-recurse-submodules \
-    --branch "$SDK_REF" "$SDK_REPO" /tmp/edge-ai-libraries \
-    && git -C /tmp/edge-ai-libraries sparse-checkout set frameworks/mcp-service-sdk \
     && /opt/qsr/.venv/mcp/bin/python -m pip install \
-    "/tmp/edge-ai-libraries/frameworks/mcp-service-sdk[mcp]" \
+    -r /opt/qsr/tests/mcp-services/requirements.txt \
     -r /opt/qsr/autonomy/requirements.txt PyYAML \
-    && rm -rf /tmp/edge-ai-libraries \
     && rm -rf /home/qsr/.cache
 
 

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Simulated Kiosk service built on the mcp-service-sdk contract.
+"""Simulated Kiosk MCP service built on FastMCP.
 
-Declares one read tool (`get_kiosk_context`) and gated menu action tools on a
-ServiceServer, then serves them over the shared stdio transport. Tool names and
-JSON-Schema signatures are stable for any compatible MCP client.
+Declares one read tool (`get_kiosk_context`) and policy-gated menu action tools
+with explicit JSON Schemas. Tool names and signatures are stable for any
+compatible MCP client.
 """
 
 from __future__ import annotations
@@ -18,10 +18,7 @@ from uuid import uuid4
 
 import fcntl
 
-# Import the runtime first so the shared test transport is available.
-from service_runtime import run_service
-
-from mcp_service_sdk import GateLevel, ServiceConfig, ServiceServer
+from service_base import GateLevel, QsrService
 
 STORE_ID = "qsr-001"
 
@@ -59,9 +56,7 @@ KIOSK_CONTEXT = {
     },
 }
 
-svc = ServiceServer.from_config(
-    ServiceConfig(service="kiosk-placeholder", store_id=STORE_ID, log_backend="memory", metrics="null")
-)
+svc = QsrService("kiosk-placeholder", STORE_ID)
 
 svc.register_event_type(
     "menu_changed",
@@ -306,7 +301,8 @@ TOOL_SCHEMAS = {
         "additionalProperties": False,
     },
 }
+svc.set_schemas(TOOL_SCHEMAS)
 
 
 if __name__ == "__main__":
-    run_service(svc, "kiosk-placeholder", TOOL_SCHEMAS)
+    svc.run()
