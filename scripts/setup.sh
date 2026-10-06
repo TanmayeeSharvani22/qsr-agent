@@ -34,13 +34,10 @@ WARM_UP_UI=${WARM_UP_UI:-false}
 # restrict to loopback.
 QSR_UI_HOST=${QSR_UI_HOST:-0.0.0.0}
 QSR_UI_PORT=${QSR_UI_PORT:-8600}
-# Weather MCP service (replaces the old kiosk weather placeholder). It is a
-# separate project with its own venv. Keep the port in sync with the `weather`
-# entry in agent-config/hermes/remote-mcp.example.yaml.
+# Weather MCP service (services/weather), installed into the MCP venv. Keep the
+# port in sync with the `weather` entry in agent-config/hermes/remote-mcp.example.yaml.
 START_WEATHER=${START_WEATHER:-true}
-WEATHER_SERVICE_DIR=${WEATHER_SERVICE_DIR:-"$ROOT_DIR/../weather-simulator"}
-WEATHER_GIT_URL=${WEATHER_GIT_URL:-https://github.com/unarayan/weather-simulator.git}
-WEATHER_GIT_REF=${WEATHER_GIT_REF:-main}
+WEATHER_SERVICE_DIR="$ROOT_DIR/services/weather"
 WEATHER_HOST=${WEATHER_HOST:-127.0.0.1}
 WEATHER_PORT=${WEATHER_PORT:-8090}
 # Set by start_weather_service; empty disables weather reads in autonomy.
@@ -93,10 +90,7 @@ Optional environment variables:
     WARM_UP_UI          Run one warm-up UI chat request during setup (default false)
     QSR_UI_HOST         Operator UI bind host (default 0.0.0.0)
     QSR_UI_PORT         Operator UI bind port (default 8600)
-    START_WEATHER       Install and start the weather MCP service (default true)
-    WEATHER_SERVICE_DIR weather-simulator checkout (default ../weather-simulator)
-    WEATHER_GIT_URL     Clone source when WEATHER_SERVICE_DIR is missing
-    WEATHER_GIT_REF     Git ref for WEATHER_GIT_URL (default main)
+    START_WEATHER       Start the weather MCP service (default true)
     WEATHER_HOST        Weather service bind host (default 127.0.0.1)
     WEATHER_PORT        Weather service port (default 8090)
 EOF
@@ -220,10 +214,11 @@ ensure_mcp_venv() {
         python3 -m venv "$MCP_VENV" || fail "Could not create $MCP_VENV. Install python3-venv."
     fi
     "$MCP_VENV_PY" -m pip install --quiet --upgrade pip
-    log "Installing FastMCP service and autonomy dependencies into $MCP_VENV"
+    log "Installing FastMCP service, weather service, and autonomy dependencies into $MCP_VENV"
     "$MCP_VENV_PY" -m pip install --quiet --upgrade \
         -r "$ROOT_DIR/tests/mcp-services/requirements.txt" \
-        -r "$ROOT_DIR/autonomy/requirements.txt" ||
+        -r "$ROOT_DIR/autonomy/requirements.txt" \
+        -e "$WEATHER_SERVICE_DIR" ||
         fail "Failed to install MCP service dependencies into $MCP_VENV"
 }
 
@@ -501,7 +496,7 @@ start_weather_service() {
     local health_url="http://$WEATHER_HOST:$WEATHER_PORT/health"
     local pid_file="/tmp/qsr-weather-service.pid"
     local log_file="/tmp/qsr-weather-service.log"
-    local venv="$WEATHER_SERVICE_DIR/.venv"
+    local weather_bin="$MCP_VENV/bin/weather-simulator"
     local pid attempt
 
     pid=$(cat "$pid_file" 2>/dev/null || true)
@@ -516,25 +511,8 @@ start_weather_service() {
     fi
     rm -f "$pid_file"
 
-    if [[ ! -f "$WEATHER_SERVICE_DIR/pyproject.toml" ]]; then
-        if [[ -e "$WEATHER_SERVICE_DIR" ]]; then
-            warn_weather_disabled "$WEATHER_SERVICE_DIR exists but is not a weather-simulator checkout"
-            return 0
-        fi
-        log "Fetching weather service from $WEATHER_GIT_URL@$WEATHER_GIT_REF"
-        if ! git clone --depth 1 --branch "$WEATHER_GIT_REF" "$WEATHER_GIT_URL" "$WEATHER_SERVICE_DIR" >/dev/null 2>&1 ||
-            [[ ! -f "$WEATHER_SERVICE_DIR/pyproject.toml" ]]; then
-            warn_weather_disabled "Could not obtain the weather service from $WEATHER_GIT_URL@$WEATHER_GIT_REF"
-            return 0
-        fi
-    fi
-    if [[ ! -x "$venv/bin/python" ]] && ! python3 -m venv "$venv"; then
-        warn_weather_disabled "Could not create $venv"
-        return 0
-    fi
-    log "Installing weather service into $venv"
-    if ! "$venv/bin/python" -m pip install --quiet --upgrade -e "$WEATHER_SERVICE_DIR"; then
-        warn_weather_disabled "Could not install the weather service"
+    if [[ ! -x "$weather_bin" ]]; then
+        warn_weather_disabled "$weather_bin is missing; rerun setup to install the MCP venv"
         return 0
     fi
 
@@ -542,7 +520,7 @@ start_weather_service() {
     WEATHER_EVENT_WEBHOOK_URL="${WEATHER_EVENT_WEBHOOK_URL:-http://127.0.0.1:$QSR_UI_PORT/autonomy/events}" \
         WEATHER_STORE_ID="${WEATHER_STORE_ID:-${QSR_RESTAURANT_ID:-qsr-001}}" \
         WEATHER_LOCATION_NAME="${WEATHER_LOCATION_NAME:-Demo QSR Restaurant}" \
-        nohup "$venv/bin/weather-simulator" serve --transport http \
+        nohup "$weather_bin" serve --transport http \
         --host "$WEATHER_HOST" --port "$WEATHER_PORT" > "$log_file" 2>&1 &
     echo $! > "$pid_file"
     for attempt in {1..20}; do
@@ -657,6 +635,8 @@ validate_stack() {
     log "Running model-independent service tests"
     PYTHONDONTWRITEBYTECODE=1 "$MCP_VENV_PY" -m unittest discover \
         -s "$ROOT_DIR/tests/mcp-services" -p 'test_services.py' -v
+    PYTHONDONTWRITEBYTECODE=1 "$MCP_VENV_PY" -m unittest discover \
+        -s "$WEATHER_SERVICE_DIR/tests"
 }
 
 main() {

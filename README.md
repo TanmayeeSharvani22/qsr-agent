@@ -62,11 +62,10 @@ availability and order-remake proposals. Extensions add capabilities and skills,
 not event policies. The application validates model-selected reads and proposed
 actions, and records no-action reasons when intervention is not justified.
 
-Weather comes from the
-[weather-simulator](https://github.com/unarayan/weather-simulator) MCP service,
-built from `WEATHER_SERVICE_DIR` (default `../weather-simulator`; clone it there
-first) and run as the compose `weather` service. Set demo weather, which also
-sends a `weather_changed` event to the autonomy webhook:
+Weather comes from the weather MCP service in
+[`services/weather`](services/weather/README.md), run as the compose `weather`
+service. Set demo weather, which also sends a `weather_changed` event to the
+autonomy webhook:
 
 ```bash
 make weather CONDITION=rain TEMP=12        # clear|cloudy|fog|drizzle|rain|storm|snow

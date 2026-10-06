@@ -54,13 +54,13 @@ services:
     networks:
       - qsr
 
-  # Weather MCP service (replaces the old kiosk weather placeholder). Demo
-  # weather is set with `make weather CONDITION=rain TEMP=12`; for real weather
-  # set WEATHER_BACKEND=open-meteo plus WEATHER_LATITUDE/WEATHER_LONGITUDE.
+  # Weather MCP service (services/weather). Demo weather is set with
+  # `make weather CONDITION=rain TEMP=12`; for real weather set
+  # WEATHER_BACKEND=open-meteo plus WEATHER_LATITUDE/WEATHER_LONGITUDE.
   weather:
-    image: ${WEATHER_IMAGE:-weather-simulator:local}
+    image: ${WEATHER_IMAGE:-qsr-weather:local}
     build:
-      context: ${WEATHER_SERVICE_DIR:-../weather-simulator}
+      context: ./services/weather
       args: *proxy-build-args
     environment:
       <<: *proxy-env

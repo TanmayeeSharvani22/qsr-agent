@@ -13,7 +13,8 @@ mcp_servers:
     connect_timeout: 15
     timeout: 120
 
-  # Weather (store-location conditions) from the compose `weather` service.
+  # Weather (store-location conditions) from services/weather, run as the compose
+  # `weather` service or by setup.sh on the host.
   # QSR_WEATHER_MCP_URL may point at a real-weather deployment; empty removes it.
   weather:
     url: ${QSR_WEATHER_MCP_URL}

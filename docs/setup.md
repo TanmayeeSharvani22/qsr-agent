@@ -124,10 +124,9 @@ on the host. It is idempotent and performs these operations:
   unavailable, it uses an isolated `.venv/qsr-setup-target` directory.
 4. Downloads `OpenVINO/Qwen3-8B-int4-ov` to `<repo>/models`.
 5. Pulls the OVMS GPU image and starts `ovms-qwen3-8b` on loopback port 8000.
-6. Installs and starts the weather MCP service (`weather-simulator`) on
-  `127.0.0.1:8090` in its own venv, sending `weather_changed` events to the
-  Operator UI. Set `WEATHER_SERVICE_DIR` to an existing checkout, or
-  `START_WEATHER=false` to manage it yourself.
+6. Installs the weather MCP service from `services/weather` into the MCP venv and
+  starts it on `127.0.0.1:8090`, sending `weather_changed` events to the
+  Operator UI. Set `START_WEATHER=false` to manage it yourself.
 7. Backs up and merges `~/.hermes/config.yaml`; unrelated settings survive.
 8. Registers Kiosk and Order Accuracy as local stdio MCP servers and Weather as
   a Streamable HTTP server (enabled only when reachable).
@@ -146,12 +145,11 @@ Useful overrides:
 ```bash
 MODEL_ROOT=/data/models OVMS_PORT=8010 ./scripts/setup.sh
 HERMES_CONFIG=/data/hermes/config.yaml ./scripts/setup.sh
-WEATHER_SERVICE_DIR=/path/to/weather-simulator ./scripts/setup.sh
 ```
 
-Change demo weather with `weather-simulator set rain --temperature 12` from the
-weather service venv, or `POST http://127.0.0.1:8090/simulator/weather`. Its log
-is `/tmp/qsr-weather-service.log`.
+Change demo weather with `.venv/mcp/bin/weather-simulator set rain --temperature 12`,
+or `POST http://127.0.0.1:8090/simulator/weather`. Its log is
+`/tmp/qsr-weather-service.log`.
 
 Keep the same overrides when later running `./scripts/setup.sh --check`.
 
