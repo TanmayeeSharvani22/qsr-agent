@@ -20,27 +20,11 @@ class DomainContractTests(unittest.TestCase):
         self.assertEqual(context["schema_version"], "1.0")
         self.assertIn("queue_count", context["operations"])
         self.assertIn("estimated_wait_minutes", context["operations"])
-        self.assertIn("is_raining", context["weather"])
         self.assertIn("items", context["menu"])
         self.assertIn("observed_at", context)
 
-    def test_kiosk_weather_can_be_overridden(self) -> None:
-        with patch.dict(os.environ, {"QSR_WEATHER_CONDITION": "clear"}):
-            context = kiosk_server.get_kiosk_context()
-
-        self.assertEqual(context["weather"]["condition"], "clear")
-        self.assertFalse(context["weather"]["is_raining"])
-
-    def test_kiosk_weather_simulator_toggles_every_thirty_seconds(self) -> None:
-        with patch.dict(os.environ, {"QSR_WEATHER_TOGGLE_SECONDS": "30"}):
-            first = kiosk_server._simulated_weather(now=0)
-            same_period = kiosk_server._simulated_weather(now=29.999)
-            next_period = kiosk_server._simulated_weather(now=30)
-
-        self.assertTrue(first["is_raining"])
-        self.assertEqual(first["condition"], same_period["condition"])
-        self.assertFalse(next_period["is_raining"])
-        self.assertNotEqual(first["condition"], next_period["condition"])
+    def test_kiosk_context_does_not_own_weather(self) -> None:
+        self.assertNotIn("weather", kiosk_server.get_kiosk_context())
 
     def test_kiosk_queue_scenario_can_be_configured(self) -> None:
         with patch.dict(os.environ, {"QSR_QUEUE_COUNT": "0", "QSR_ESTIMATED_WAIT_MINUTES": "0"}):

@@ -1,3 +1,19 @@
+# Corporate proxy from the invoking shell (or .env); empty values disable it.
+# Each service extends NO_PROXY with its own compose-internal hosts.
+x-proxy-build-args: &proxy-build-args
+  http_proxy: ${http_proxy:-}
+  https_proxy: ${https_proxy:-}
+  HTTP_PROXY: ${HTTP_PROXY:-${http_proxy:-}}
+  HTTPS_PROXY: ${HTTPS_PROXY:-${https_proxy:-}}
+  no_proxy: ${no_proxy:-localhost,127.0.0.1,::1}
+  NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1,::1}
+
+x-proxy-env: &proxy-env
+  http_proxy: ${http_proxy:-}
+  https_proxy: ${https_proxy:-}
+  HTTP_PROXY: ${HTTP_PROXY:-${http_proxy:-}}
+  HTTPS_PROXY: ${HTTPS_PROXY:-${https_proxy:-}}
+
 services:
   ovms:
     image: openvino/model_server:${OVMS_IMAGE_TAG:-2026.2-gpu}
@@ -38,23 +54,55 @@ services:
     networks:
       - qsr
 
+  # Weather MCP service (replaces the old kiosk weather placeholder). Demo
+  # weather is set with `make weather CONDITION=rain TEMP=12`; for real weather
+  # set WEATHER_BACKEND=open-meteo plus WEATHER_LATITUDE/WEATHER_LONGITUDE.
+  weather:
+    image: ${WEATHER_IMAGE:-weather-simulator:local}
+    build:
+      context: ${WEATHER_SERVICE_DIR:-../weather-simulator}
+      args: *proxy-build-args
+    environment:
+      <<: *proxy-env
+      WEATHER_BACKEND: ${WEATHER_BACKEND:-simulator}
+      WEATHER_STORE_ID: ${WEATHER_STORE_ID:-qsr-001}
+      WEATHER_LOCATION_NAME: ${WEATHER_LOCATION_NAME:-Demo QSR Restaurant}
+      WEATHER_LATITUDE: ${WEATHER_LATITUDE:-}
+      WEATHER_LONGITUDE: ${WEATHER_LONGITUDE:-}
+      WEATHER_EVENT_WEBHOOK_URL: http://qsr-agent:8600/autonomy/events
+      NO_PROXY: localhost,127.0.0.1,::1,qsr-agent,${QSR_EXTRA_NO_PROXY:-}
+      no_proxy: localhost,127.0.0.1,::1,qsr-agent,${QSR_EXTRA_NO_PROXY:-}
+    ports:
+      # Loopback only: /simulator/* control is reserved for `make weather`.
+      - "127.0.0.1:${WEATHER_PORT:-8090}:8090"
+    volumes:
+      - weather-state:/home/weather/.local/state/weather-simulator
+    init: true
+    restart: unless-stopped
+    networks:
+      - qsr
+
   qsr-agent:
     image: ${QSR_IMAGE:-intel/qsr-agent:latest}
     build:
       context: .
       dockerfile: Dockerfile
       args:
+        <<: *proxy-build-args
         SDK_REPO: ${SDK_REPO:-https://github.com/sachinkaushik/edge-ai-libraries.git}
         SDK_REF: ${SDK_REF:-mcp}
         HERMES_INSTALL_URL: ${HERMES_INSTALL_URL:-https://hermes-agent.nousresearch.com/install.sh}
         HERMES_INSTALL_COMMIT: ${HERMES_INSTALL_COMMIT:-}
     depends_on:
-      - ovms
+      ovms:
+        condition: service_started
+      weather:
+        condition: service_healthy
     environment:
+      <<: *proxy-env
       MODEL_ID: ${MODEL_ID:-OpenVINO/Qwen3-8B-int4-ov}
       QSR_MODEL_BASE_URL: http://ovms:8000/v3
       QSR_ADVISOR_BASE_URL: http://ovms:8000/v3
-      QSR_CALLBACK_URL: ${QSR_CALLBACK_URL:-}
       QSR_UI_HOST: 0.0.0.0
       QSR_UI_PORT: "8600"
       HERMES_BIN: /home/qsr/.local/bin/hermes
@@ -62,12 +110,15 @@ services:
       HERMES_TIMEOUT: ${HERMES_TIMEOUT:-300}
       QSR_AUTONOMY_DB: /home/qsr/.local/state/qsr-agent/autonomy.db
       QSR_MCP_PYTHON: /opt/qsr/.venv/mcp/bin/python
-      QSR_MCP_SUBSCRIPTIONS: "[]"
+      # Used by autonomy reads and the `weather` Hermes MCP registration.
+      QSR_WEATHER_MCP_URL: ${QSR_WEATHER_MCP_URL:-http://weather:8090/mcp}
       SAD_TIMEZONE: ${SAD_TIMEZONE:-Asia/Kolkata}
       # Bypass the corporate proxy for loopback, the compose network, and LAN
       # ranges — remote MCP services (e.g. SAD on a 10.x host) are reached direct.
-      NO_PROXY: localhost,127.0.0.1,::1,ovms,host.docker.internal,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,.intel.com
-      no_proxy: localhost,127.0.0.1,::1,ovms,host.docker.internal,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,.intel.com
+      # Python ignores CIDR entries, so LAN hosts it calls must be listed by IP
+      # in QSR_EXTRA_NO_PROXY (comma-separated).
+      NO_PROXY: localhost,127.0.0.1,::1,ovms,weather,host.docker.internal,${QSR_EXTRA_NO_PROXY:-},10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,.intel.com
+      no_proxy: localhost,127.0.0.1,::1,ovms,weather,host.docker.internal,${QSR_EXTRA_NO_PROXY:-},10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,.intel.com
     ports:
       - "${QSR_UI_HOST:-0.0.0.0}:${QSR_UI_PORT:-8600}:8600"
     volumes:
@@ -100,6 +151,7 @@ services:
 
 volumes:
   autonomy-state:
+  weather-state:
 
 networks:
   qsr:

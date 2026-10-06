@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import os
 import json
-import time
 from copy import deepcopy
 from datetime import UTC, datetime
 from pathlib import Path
@@ -41,12 +40,6 @@ KIOSK_CONTEXT = {
         "estimated_wait_minutes": 6,
         "active_kiosks": 3,
         "staff_on_duty": 8,
-    },
-    "weather": {
-        "condition": "rain",
-        "is_raining": True,
-        "temperature_c": 14.0,
-        "source": "kiosk-weather-placeholder",
     },
     "menu": {
         "active_menu_id": "lunch-standard",
@@ -156,31 +149,13 @@ def _resolve_item_id(value: str) -> str:
         raise ValueError(f"Unknown menu item: {value}. Allowed item IDs: {allowed}") from error
 
 
-def _simulated_weather(now: float | None = None) -> dict[str, Any]:
-    toggle_seconds = float(os.environ.get("QSR_WEATHER_TOGGLE_SECONDS", "30"))
-    if toggle_seconds <= 0:
-        raise ValueError("QSR_WEATHER_TOGGLE_SECONDS must be greater than zero")
-    current_time = time.time() if now is None else now
-    period = int(current_time // toggle_seconds)
-    is_raining = period % 2 == 0
-    return {
-        "condition": "rain" if is_raining else "clear",
-        "is_raining": is_raining,
-        "temperature_c": 14.0 if is_raining else 18.0,
-        "source": "kiosk-weather-simulator",
-        "simulation_interval_seconds": toggle_seconds,
-        "next_change_at": datetime.fromtimestamp(
-            (period + 1) * toggle_seconds, UTC
-        ).isoformat(),
-    }
-
-
 @svc.read_tool(
     "get_kiosk_context",
     description=(
         "Return a complete snapshot of restaurant identity, current menu, queue, "
         "wait time, staffing, kiosk availability, and recent ordering activity. Use "
-        "this broad context tool for kiosk and restaurant-state questions."
+        "this broad context tool for kiosk and restaurant-state questions. Weather "
+        "is owned by the separate weather MCP service."
     ),
 )
 def get_kiosk_context() -> dict[str, Any]:
@@ -198,13 +173,6 @@ def get_kiosk_context() -> dict[str, Any]:
             if value < 0:
                 raise ValueError(f"{variable} must be nonnegative")
             context["operations"][field] = value
-    context["weather"] = _simulated_weather()
-    condition = os.environ.get("QSR_WEATHER_CONDITION")
-    if condition:
-        context["weather"]["condition"] = condition.lower()
-        context["weather"]["is_raining"] = condition.lower() in {
-            "rain", "raining", "drizzle", "storm"
-        }
     context["observed_at"] = datetime.now(UTC).isoformat()
     return context
 

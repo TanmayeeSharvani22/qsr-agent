@@ -7,15 +7,16 @@ import threading
 import time
 import unittest
 import urllib.request
-from http.server import ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
 
 from autonomy.advisor import HermesRunner
 from autonomy.event_agent import Capability, CapabilityCatalog, HermesEventAgent, Skill, StaleContextError, parse_event_response
+from autonomy.mcp import HttpMcpClient
 from autonomy.registry import AutonomyRegistry
-from autonomy.service_capabilities import validate_menu, validate_remake
+from autonomy.service_capabilities import register_defaults, validate_menu, validate_remake
 from autonomy.store import ProposalStore
 from autonomy.worker import build_controller
 
@@ -261,6 +262,16 @@ class EventAgentTests(unittest.TestCase):
         self.assertTrue(result["executed"])
         self.assertEqual(self.service.calls[-1][0], "remake")
 
+    def test_skill_prefixed_tool_names_resolve_to_registered_capabilities(self):
+        prefixed_read = {"skills": ["accuracy"], "reads": [{"tool": "accuracy.accuracy.context", "arguments": {}}]}
+        prefixed_action = {"summary": "Remake", "action": {
+            "tool": "accuracy.accuracy.remake", "arguments": {"order_id": "ORD-1042"}}}
+        runner = ScriptedHermes(prefixed_read, prefixed_action)
+        evaluation = HermesEventAgent(runner, self.catalog).evaluate_event(self.event, False)
+        self.assertEqual(evaluation.proposal.tool, "accuracy.remake")
+        self.assertEqual(evaluation.decision["reads"], [{"tool": "accuracy.context", "arguments": {}}])
+        self.assertEqual(len(runner.prompts), 2)
+
     def test_write_disguised_as_read_never_executes(self):
         runner = ScriptedHermes(
             {"skills": ["accuracy"], "reads": [self.action["action"]]},
@@ -502,6 +513,68 @@ class EventAgentTests(unittest.TestCase):
         with patch.object(self.service, "call_tool", return_value={"restaurant": {"id": "other"}}):
             with self.assertRaisesRegex(ValueError, "restaurant"):
                 self.catalog.read("accuracy.context", {})
+
+    def test_location_scoped_read_skips_restaurant_identity(self):
+        weather = FakeService()
+        self.catalog.register_tool(Capability(
+            "weather.context", "Weather", weather, "context", True, store_scoped=False,
+        ))
+        with patch.object(weather, "call_tool", return_value={"condition": "rain"}):
+            self.assertEqual(self.catalog.read("weather.context", {}), {"condition": "rain"})
+
+    def test_weather_read_is_available_to_event_menu_decisions(self):
+        catalog = CapabilityCatalog()
+        register_defaults(catalog, Path.cwd(), FakeService(), FakeService(), FakeService())
+        catalog.validate()
+        self.assertFalse(catalog.tools["weather.get_weather_details"].store_scoped)
+        self.assertIn("weather.get_weather_details", catalog.skills["event-menu-decisions"].tools)
+        without_weather = CapabilityCatalog()
+        register_defaults(without_weather, Path.cwd(), FakeService(), FakeService())
+        self.assertNotIn("weather.get_weather_details", without_weather.tools)
+
+    def test_http_mcp_client_uses_session_and_structured_content(self):
+        seen = []
+
+        class StreamableHandler(BaseHTTPRequestHandler):
+            def log_message(self, *args):
+                pass
+
+            def do_POST(self):
+                message = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                seen.append((message["method"], self.headers.get("Mcp-Session-Id")))
+                if "id" not in message:
+                    self.send_response(202)
+                    self.end_headers()
+                    return
+                result = {"protocolVersion": "2025-03-26"}
+                if message["method"] == "tools/call":
+                    result = {"content": [], "structuredContent": {"condition": "rain"}, "isError": False}
+                body = f"event: message\ndata: {json.dumps({'jsonrpc': '2.0', 'id': message['id'], 'result': result})}\n\n"
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.send_header("Mcp-Session-Id", "session-1")
+                self.end_headers()
+                self.wfile.write(body.encode())
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), StreamableHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            client = HttpMcpClient(f"http://127.0.0.1:{server.server_port}/mcp", timeout=2)
+            self.assertEqual(client.call_tool("get_weather_details"), {"condition": "rain"})
+        finally:
+            server.shutdown()
+            thread.join()
+            server.server_close()
+        self.assertEqual(seen, [
+            ("initialize", None),
+            ("notifications/initialized", "session-1"),
+            ("tools/call", "session-1"),
+        ])
+
+    def test_http_mcp_client_reports_unavailable_service(self):
+        with self.assertRaisesRegex(RuntimeError, "unavailable"):
+            HttpMcpClient("http://127.0.0.1:9/mcp", timeout=1).list_tools()
 
 
 if __name__ == "__main__":

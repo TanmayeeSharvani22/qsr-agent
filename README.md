@@ -39,8 +39,8 @@ http://127.0.0.1:8600
 ```
 
 The UI provides operator chat, connected-service status, and a right-side
-Automatic Alerts panel for subscribed critical events. To use the CLI instead,
-run `docker compose exec qsr-agent hermes`.
+**Autonomy decisions** panel for event assessments and approvals. To use the CLI
+instead, run `docker compose exec qsr-agent hermes`.
 
 ```bash
 make logs
@@ -49,9 +49,7 @@ make down
 ```
 
 Register remote services in `agent-config/hermes/remote-mcp.example.yaml`, setting
-each `url` to a routable MCP address, for example `http://10.0.0.25:9000/mcp`. Set
-`QSR_CALLBACK_URL` to a URL the service host can reach, for example
-`http://<qsr-host-ip>:8600/notifications`.
+each `url` to a routable MCP address, for example `http://10.0.0.25:9000/mcp`.
 
 The UI also hosts a generic autonomy webhook. Hermes selects relevant skills
 and MCP reads for incoming events; resulting actions wait for approval in the
@@ -63,6 +61,20 @@ There is no fixed event-to-action mapping. The included catalog supports menu
 availability and order-remake proposals. Extensions add capabilities and skills,
 not event policies. The application validates model-selected reads and proposed
 actions, and records no-action reasons when intervention is not justified.
+
+Weather comes from the
+[weather-simulator](https://github.com/unarayan/weather-simulator) MCP service,
+built from `WEATHER_SERVICE_DIR` (default `../weather-simulator`; clone it there
+first) and run as the compose `weather` service. Set demo weather, which also
+sends a `weather_changed` event to the autonomy webhook:
+
+```bash
+make weather CONDITION=rain TEMP=12        # clear|cloudy|fog|drizzle|rain|storm|snow
+make weather CONDITION=clear NO_EVENT=1    # change silently
+```
+
+Behind a corporate proxy, export `http_proxy`, `https_proxy`, and `no_proxy`
+before `make up`; they are passed to image builds and containers.
 
 If you kept the default LAN binding, open `http://<host>:8600` from your
 browser. If you set `QSR_UI_HOST=127.0.0.1`, forward the port first when the

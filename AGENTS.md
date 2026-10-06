@@ -4,7 +4,8 @@ Use remote MCP services as the authoritative source for restaurant operations.
 Skills explain routing and interpretation; they are never sources of live data.
 
 - Load the `kiosk-operations` skill for restaurant, menu, weather, queue, wait-time,
-	kiosk, staffing, ordering-activity, or menu-change requests.
+	kiosk, staffing, ordering-activity, or menu-change requests. Weather comes
+	from the `weather` MCP service, not kiosk context.
 - Load the `order-accuracy` skill for accuracy, station, mismatch, confidence,
 	alert, remake, or comp requests.
 - Call `get_kiosk_context` and `get_order_accuracy_context` once each when a

@@ -3,11 +3,9 @@
 
 from __future__ import annotations
 
-import json
 import os
 import re
 import subprocess
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -19,7 +17,6 @@ HERMES_HOME = Path(os.environ.get("HERMES_HOME", str(Path.home() / ".hermes")))
 HERMES_CONFIG = Path(os.environ.get("HERMES_CONFIG", str(HERMES_HOME / "config.yaml")))
 MODEL_ID = os.environ.get("MODEL_ID", "OpenVINO/Qwen3-8B-int4-ov")
 MODEL_URL = os.environ.get("QSR_MODEL_BASE_URL", "http://ovms:8000/v3")
-CALLBACK_URL = os.environ.get("QSR_CALLBACK_URL", "").strip()
 
 
 def _merge(current: Any, update: Any) -> Any:
@@ -106,27 +103,6 @@ def configure_hermes() -> None:
     temporary.replace(HERMES_CONFIG)
     subprocess.run(["hermes", "config", "migrate"], check=True, stdin=subprocess.DEVNULL)
     subprocess.run(["hermes", "config", "check"], check=True, stdin=subprocess.DEVNULL)
-
-    subscriptions_path = Path(
-        os.environ.get("SUBSCRIBE_EVENTS_FILE", str(ROOT / "agent-config/hermes/subscribe-events.yaml"))
-    )
-    subscriptions: list[dict[str, str]] = []
-    if subscriptions_path.is_file():
-        document = _expand_env(_load_yaml(subscriptions_path))
-        for subscription in document.get("subscriptions", []):
-            if not subscription.get("enabled", True):
-                continue
-            endpoint = str(subscription.get("url", "")).strip()
-            if not endpoint:  # unset ${VAR} -> service not configured
-                continue
-            callback = CALLBACK_URL or str(subscription.get("callback_url", ""))
-            subscriptions.append({
-                "url": endpoint,
-                "event_type": str(subscription["event_type"]),
-                "condition": str(subscription.get("condition", "*")),
-                "callback_url": callback,
-            })
-    os.environ["QSR_MCP_SUBSCRIPTIONS"] = json.dumps(subscriptions, separators=(",", ":"))
 
 
 def main() -> None:

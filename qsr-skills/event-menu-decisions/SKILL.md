@@ -13,6 +13,9 @@ metadata:
 Decide whether a `weather_changed` or `queue_count_changed` event justifies a
 temporary menu availability change. Treat event values as the newest observation;
 use the supplied kiosk state for staffing, demand, wait time, and current menu.
+Kiosk context contains no weather. When current weather matters, read
+`weather.get_weather_details` (`condition`, `is_raining`, `temperature_c`,
+`source`, `simulated`, `observed_at`) and keep it distinct from the event.
 
 For rain or cold, consider warm drinks such as Hot Chocolate or Tea. For queue
 pressure, consider queue depth, wait, staffing, demand, abandonment, and item

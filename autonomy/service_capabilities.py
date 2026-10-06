@@ -47,9 +47,11 @@ def _fresh(context: dict[str, Any]) -> None:
         raise StaleContextError("context is stale")
 
 
-def register_defaults(catalog: CapabilityCatalog, root: Path, kiosk: Any, accuracy: Any) -> None:
+def register_defaults(
+    catalog: CapabilityCatalog, root: Path, kiosk: Any, accuracy: Any, weather: Any | None = None
+) -> None:
     catalog.register_tool(Capability(
-        "kiosk.get_kiosk_context", "Read current menu, queue, wait, staffing and weather",
+        "kiosk.get_kiosk_context", "Read current menu, queue, wait, staffing and demand",
         kiosk, "get_kiosk_context", True,
     ))
     catalog.register_tool(Capability(
@@ -64,9 +66,17 @@ def register_defaults(catalog: CapabilityCatalog, root: Path, kiosk: Any, accura
         "accuracy.request_remake", "Propose remaking an exact flagged order",
         accuracy, "request_remake", False, ("accuracy.get_order_accuracy_context",), validate_remake,
     ))
+    weather_reads: tuple[str, ...] = ()
+    if weather is not None:
+        catalog.register_tool(Capability(
+            "weather.get_weather_details",
+            "Read current store-location weather: condition, is_raining, temperature_c, precipitation",
+            weather, "get_weather_details", True, store_scoped=False,
+        ))
+        weather_reads = ("weather.get_weather_details",)
     for name, description, tools in (
         ("event-menu-decisions", "Weather and queue events: decide whether menu availability should change",
-         ("kiosk.get_kiosk_context", "kiosk.change_menu_items")),
+         ("kiosk.get_kiosk_context", "kiosk.change_menu_items", *weather_reads)),
         ("kiosk-operations", "Restaurant operations, menu, queue, wait, staffing and ordering activity",
          ("kiosk.get_kiosk_context", "kiosk.change_menu_items")),
         ("order-accuracy", "Order mismatches, accuracy alerts, station issues and remake recommendations",

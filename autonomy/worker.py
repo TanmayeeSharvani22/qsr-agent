@@ -6,7 +6,7 @@ from pathlib import Path
 from .advisor import HermesRunner
 from .controller import AutonomyController
 from .event_agent import HermesEventAgent
-from .mcp import StdioMcpClient
+from .mcp import HttpMcpClient, StdioMcpClient
 from .registry import AutonomyRegistry, load_extensions
 from .store import ProposalStore
 from .service_capabilities import register_defaults
@@ -31,7 +31,9 @@ def build_controller(root: Path | None = None) -> AutonomyController:
             "QSR_ACCURACY_SERVER", project_root / "tests/mcp-services/order_accuracy_server.py"
         ))
     )
-    register_defaults(registry.catalog, project_root, kiosk_client, accuracy_client)
+    weather_url = os.environ.get("QSR_WEATHER_MCP_URL", "http://127.0.0.1:8090/mcp").strip()
+    weather_client = HttpMcpClient(weather_url) if weather_url else None
+    register_defaults(registry.catalog, project_root, kiosk_client, accuracy_client, weather_client)
     load_extensions(
         registry,
         os.environ.get("QSR_AUTONOMY_MODULES", "").split(","),
