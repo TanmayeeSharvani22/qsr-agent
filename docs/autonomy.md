@@ -50,11 +50,11 @@ operator approves the proposal.
 The operator UI displays the latest received weather event. It does not create
 weather or run a polling loop. The event producer is responsible for detecting
 weather changes, assigning unique event IDs, and retrying delivery failures.
-The [weather-simulator](https://github.com/unarayan/weather-simulator) service
-is that producer for demos: run it with
-`WEATHER_EVENT_WEBHOOK_URL=http://127.0.0.1:8600/autonomy/events` and
-`weather-simulator serve --transport http --port 8090`, then change weather with
-`weather-simulator set rain --temperature 12`. Autonomy reads it at
+The weather service in [`services/weather`](../services/weather/README.md) is
+that producer for demos. `make up` runs it as the compose `weather` service and
+`scripts/setup.sh` starts it on the host; change weather with
+`make weather CONDITION=rain TEMP=12` (compose) or
+`.venv/mcp/bin/weather-simulator set rain --temperature 12` (host). Autonomy reads it at
 `QSR_WEATHER_MCP_URL` and Hermes registers it as the `weather` MCP server.
 
 ### Queue event
@@ -156,7 +156,7 @@ item alone is not evidence that it can be restored after queue recovery.
   the UI, and read the menu again to verify the approved availability.
 - Queue recovery: hide Vanilla Shake with a temporary queue-pressure reason.
   Start the operator server with `QSR_QUEUE_COUNT=0` and
-  `QSR_ESTIMATED_WAIT_MINUTES=0`, run `weather-simulator set clear --no-event`, and send a queue
+  `QSR_ESTIMATED_WAIT_MINUTES=0`, run `make weather CONDITION=clear NO_EVENT=1`, and send a queue
   event with `queue_count: 0` and `previous_queue_count: 20`. The service reason
   allows Hermes to choose the item without an item ID in the event. Reject a
   proposal and verify no state change; use a fresh event to test approval.

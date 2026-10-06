@@ -44,6 +44,7 @@ See [Autonomous decisions](autonomy.md).
 ## Repository Layout
 
 ```text
+services/weather/                 Weather MCP service (simulator or Open-Meteo), events, Dockerfile
 tests/mcp-services/
   service_base.py                 FastMCP service contract, policy gate, tool-call log
   service_launcher.py             Chooses one domain service per process

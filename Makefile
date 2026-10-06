@@ -15,14 +15,13 @@ HERMES_INSTALL_COMMIT ?=
 HOST_UID ?= $(shell id -u)
 HOST_GID ?= $(shell id -g)
 WEATHER_PORT ?= 8090
-WEATHER_SERVICE_DIR ?= $(CURDIR)/../weather-simulator
 RENDER_DEVICE ?= $(firstword $(wildcard /dev/dri/renderD*))
 RENDER_GID ?= $(shell if [ -n "$(RENDER_DEVICE)" ]; then stat -c '%g' "$(RENDER_DEVICE)"; else echo 992; fi)
 
 export MODEL_ROOT MODEL_ID OVMS_PORT QSR_UI_PORT QSR_UI_HOST
 export HERMES_INSTALL_COMMIT QSR_IMAGE TAG
 export HOST_UID HOST_GID RENDER_GID
-export WEATHER_PORT WEATHER_SERVICE_DIR
+export WEATHER_PORT
 
 .PHONY: init-env check build build-ready up up-ready down restart logs status download-models weather
 
@@ -39,7 +38,6 @@ check:
 	@test -n "$(RENDER_DEVICE)" -a -e "$(RENDER_DEVICE)" || { echo "No Intel render device found at /dev/dri/render*" >&2; exit 1; }
 	@test -f "$(MODEL_ROOT)/$(MODEL_ID)/config.json" || { echo "Model missing: $(MODEL_ROOT)/$(MODEL_ID)/config.json. Download it first or set MODEL_ROOT/MODEL_ID." >&2; exit 1; }
 	@docker compose version >/dev/null
-	@test -f "$(WEATHER_SERVICE_DIR)/Dockerfile" || { echo "Weather service missing: $(WEATHER_SERVICE_DIR)/Dockerfile. Clone weather-simulator there or set WEATHER_SERVICE_DIR." >&2; exit 1; }
 
 build: init-env
 	$(MAKE) --no-print-directory build-ready
