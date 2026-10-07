@@ -41,7 +41,7 @@ runtime state. Do not claim to perform those actions through SAD.
 | How often / which station and shift | `Get_trend_counts` | optional `zone`, `event_name`, `use_case`, time bounds | Report returned station/shift buckets only. State explicit time bounds only when the operator provided them; otherwise say the buckets are across the current SAD log. This tool counts events; it does not compare against a baseline. |
 | Last N days / per-day counts / daily trend | `Get_daily_counts` | `days` (default 7); optional `zone`, `event_name`, `use_case` | Do not compute dates, sums, or trends yourself. For each zone, report its returned `summary` (total, every listed day with events, and `trend`). Never report a single day's count as the window total. |
 | Severity threshold count | `Get_event_count` | `minimum_severity` | `minimum_severity="high"` includes both high and critical events. Do not describe it as an exact-severity count. |
-| Frame evidence | `Search_retrospective_frames` | `frame` and `frame_refs` | Report references when present. If empty, say no frame reference was returned; do not claim an image was fetched or displayed. |
+| Frame evidence | `Search_retrospective_frames` | `frame`, `frame_refs`, `frame_count` | Each record is one event; show one row per `ref_id`, never one row per frame. `frame_refs` holds at most 3 sample references and `frame_count` the total stored. If empty, say no frame reference was returned; do not claim an image was fetched or displayed. |
 
 ## Complex Questions
 
@@ -68,7 +68,8 @@ station/shift grouping, call `Get_trend_counts`. For a combined request such as
 only if the operator also asks for individual records or frame evidence. Do not
 answer a detailed list request with a count or carry counts forward from a
 previous turn. Use only returned fields and keep each event's zone and severity
-together. A single snapshot does not establish a trend or baseline comparison.
+together. Copy `timestamp`, `severity`, and `description` verbatim; never
+paraphrase, round, or fill them in. A single snapshot does not establish a trend or baseline comparison.
 Never infer or announce a time window from the earliest and latest returned event;
 only mention a `between ... and ...` window when the operator supplied that
 window or you asked for and received clarification.
