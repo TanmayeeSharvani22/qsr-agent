@@ -16,8 +16,8 @@ Operator -> Hermes -> OVMS/Qwen -> MCP service -> domain system
 
 The repository includes:
 
-- `mcp-service-sdk` as a Git package dependency: framework-neutral service, policy, log, and MCP binding.
-- `tests/mcp-services/`: runnable Kiosk and Order Accuracy simulations.
+- `tests/mcp-services/`: runnable Kiosk and Order Accuracy simulations built on
+  FastMCP, with a shared policy-gated service base (`service_base.py`).
 - `qsr-skills/`: Hermes procedures for domain Q&A and actions.
 - `agent-config/hermes/`: reusable local and remote configuration fragments.
 - `scripts/setup.sh`: repeatable Linux setup and verification.
@@ -56,10 +56,9 @@ Verify an existing installation at any time without changing it:
 | Install Hermes and local inference | [Complete setup](setup.md#2-run-setup) |
 | Start or inspect OVMS | [Exact OVMS bring-up](setup.md#4-exact-ovms-bring-up) |
 | Validate MCP and agent Q&A | [Run and verify](setup.md#5-run-and-verify) |
-| Configure proactive event alerts | [Automatic event subscriptions](setup.md#automatic-event-subscriptions) |
 | Understand component ownership | [Responsibility boundaries](architecture.md#responsibility-boundaries) |
 | Extend event skills and capabilities | [Autonomous decisions](autonomy.md) |
-| Understand subscription callbacks | [Event subscription flow](architecture.md#event-subscription-flow) |
+| Understand the event flow | [Autonomy event flow](architecture.md#autonomy-event-flow) |
 | Deploy remote MCP services | [Remote deployment](architecture.md#remote-deployment) |
 | Add a QSR domain | [Adding a QSR service](adding-a-service.md) |
 

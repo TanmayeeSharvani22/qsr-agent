@@ -20,7 +20,7 @@ a fresh context call is available.
 |---|---|---|---|
 | Current queue or guests waiting | `get_kiosk_context` | `operations.queue_count`, `observed_at` | State the count and observation time. Do not convert orders into people. |
 | Current wait time | `get_kiosk_context` | `operations.estimated_wait_minutes`, `observed_at` | Say that the value is an estimate and include minutes. |
-| Current weather | `get_kiosk_context` | `weather.condition`, `weather.is_raining`, `weather.temperature_c`, `weather.source` | Treat this as temporary kiosk-owned context and include its source. |
+| Current weather | `get_weather_details` (weather MCP service) | `condition`, `is_raining`, `temperature_c`, `source`, `simulated`, `observed_at` | Kiosk context has no weather. Include the source and say when `simulated` is true. |
 | Store status, kiosks, or staffing | `get_kiosk_context` | `operations.status`, `operations.active_kiosks`, `operations.staff_on_duty` | Return only requested values, with useful nearby context when it changes the interpretation. |
 | Menu price or availability | `get_kiosk_context` | `menu.active_menu_id`, matching entry in `menu.items` | Match by stable `id` when available; otherwise match the displayed name exactly and state ambiguity. |
 | Recent demand or kiosk activity | `get_kiosk_context` | `recent_activity.orders_last_15_minutes`, `top_item`, `abandoned_sessions` | Preserve the service's time window and distinguish orders from sessions. |

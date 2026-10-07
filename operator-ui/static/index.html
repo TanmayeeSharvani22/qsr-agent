@@ -17,8 +17,8 @@
     aside .section { padding:14px 16px 6px; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); display:flex; align-items:center; justify-content:space-between; }
     aside .count { background:var(--panel); border:1px solid var(--line); border-radius:20px; padding:1px 8px; font-size:11px; color:var(--txt); }
     #services, #approvals { list-style:none; margin:0; padding:6px 10px; overflow-y:auto; }
-    #services { max-height:34vh; }
-    #approvals { flex:1; }
+    #services { flex:1; }
+    #approvals { flex:1 1 auto; min-height:0; overscroll-behavior:contain; scrollbar-gutter:stable; }
     #services li, #approvals li { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:8px; margin-bottom:6px; background:var(--panel); border:1px solid var(--line); font-size:13px; }
     #services li .s-dot { width:8px; height:8px; border-radius:50%; background:var(--muted); flex:0 0 auto; }
     #services li.up .s-dot { background:var(--ok); }
@@ -63,16 +63,11 @@
     button.send { background:var(--me); color:#fff; border:0; border-radius:10px; padding:0 18px; font-weight:600; cursor:pointer; }
     button.send:disabled { opacity:.5; cursor:not-allowed; }
     .spin { display:inline-block; width:14px; height:14px; border:2px solid var(--muted); border-top-color:transparent; border-radius:50%; animation:s .8s linear infinite; vertical-align:middle; }
-    .alert-panel { background:#17151a; border-left:1px solid var(--line); display:flex; flex-direction:column; min-width:0; min-height:0; height:100vh; overflow:hidden; }
-    .alert-panel header { padding:14px 16px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:10px; }
-    .alert-panel h2 { font-size:15px; margin:0; font-weight:600; }
-    .alert-count { margin-left:auto; min-width:24px; text-align:center; background:#7f1d1d; color:#fecaca; border-radius:12px; padding:2px 7px; font-size:11px; }
-    #alerts { flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:12px; scrollbar-gutter:stable; }
-    .alert-empty { color:var(--muted); font-size:13px; padding:12px 4px; }
-    .alert-card { border:1px solid #713f46; border-left:3px solid #ef4444; background:#241b22; border-radius:8px; padding:11px; margin-bottom:10px; }
-    .alert-card .alert-title { color:#fecaca; font-size:11px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; }
-    .alert-card .alert-desc { margin-top:7px; font-size:13px; line-height:1.4; }
-    .alert-card .alert-meta { color:var(--muted); font-size:11px; line-height:1.5; margin-top:8px; }
+    .autonomy-panel { background:var(--side); border-left:1px solid var(--line); display:flex; flex-direction:column; min-width:0; min-height:0; height:100vh; overflow:hidden; }
+    .autonomy-panel header { padding:14px 16px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:10px; }
+    .autonomy-panel h2 { font-size:15px; margin:0; font-weight:600; }
+    .autonomy-panel .count { margin-left:auto; background:var(--panel); border:1px solid var(--line); border-radius:20px; padding:1px 8px; font-size:11px; color:var(--txt); }
+    .autonomy-panel .weather-state { padding:8px 16px 4px; }
     @keyframes s { to { transform:rotate(360deg); } }
     @media (max-width:720px) {
       body { grid-template-columns:1fr; height:auto; }
@@ -82,7 +77,7 @@
       #q { min-width:0; }
     }
     @media (max-width:1050px) { body { grid-template-columns:220px minmax(0, 1fr) 300px; } }
-    @media (max-width:720px) { body { grid-template-columns:1fr; } aside, .alert-panel { display:none; } }
+    @media (max-width:720px) { body { grid-template-columns:1fr; } aside { display:none; } .autonomy-panel { height:auto; max-height:60vh; } }
   </style>
 </head>
 <body>
@@ -96,12 +91,6 @@
       <span class="count" id="count">…</span>
     </div>
     <ul id="services"><li class="empty">Loading…</li></ul>
-    <div class="section">
-      <span>Autonomy decisions</span>
-      <span class="count" id="approval-count">…</span>
-    </div>
-    <div class="weather-state" id="weather-state">Events: waiting</div>
-    <ul id="approvals"><li class="empty">Loading…</li></ul>
     <div class="foot">
       <button class="refresh" id="refresh">Refresh</button>
       <span style="margin-left:8px;">Hermes · Qwen3 · MCP</span>
@@ -126,12 +115,13 @@
     </form>
   </main>
 
-  <section class="alert-panel" aria-label="Automatic alerts">
+  <section class="autonomy-panel" aria-label="Autonomy decisions">
     <header>
-      <h2>Automatic Alerts</h2>
-      <span class="alert-count" id="alert-count">0</span>
+      <h2>Autonomy Decisions</h2>
+      <span class="count" id="approval-count">…</span>
     </header>
-    <div id="alerts"><div class="alert-empty">No critical alerts.</div></div>
+    <div class="weather-state" id="weather-state">Events: waiting</div>
+    <ul id="approvals"><li class="empty">Loading…</li></ul>
   </section>
 
   <script>
@@ -148,9 +138,6 @@
     const approvalCount = document.getElementById('approval-count');
     const weatherState = document.getElementById('weather-state');
     let lastAutonomySnapshot = '';
-    const alerts = document.getElementById('alerts');
-    const alertCount = document.getElementById('alert-count');
-    const seenNotifications = new Set();
 
     async function loadServers() {
       services.innerHTML = '<li class="empty">Loading…</li>';
@@ -474,47 +461,6 @@
     loadAutonomy();
     setInterval(() => loadStatus(false), 30000);
     setInterval(loadAutonomy, 5000);
-
-    function renderNotification(notification) {
-      const event = notification.event || {};
-      const id = event.ref_id || event.ts_ms || JSON.stringify(notification);
-      if (seenNotifications.has(id)) return;
-      seenNotifications.add(id);
-      if (alerts.querySelector('.alert-empty')) alerts.innerHTML = '';
-      const payload = event.payload || {};
-      const card = document.createElement('article');
-      card.className = 'alert-card';
-      const time = event.ts_ms ? new Date(event.ts_ms).toLocaleString() : 'time unavailable';
-      const service = event.service || 'service';
-      const severity = payload.severity || 'alert';
-      card.innerHTML = '<div class="alert-title"></div>' +
-        '<div class="alert-desc"></div>' +
-        '<div class="alert-meta"></div>';
-      card.querySelector('.alert-title').textContent = service + ' · ' + severity;
-      card.querySelector('.alert-desc').textContent = payload.description || payload.event_name || event.event_type || 'Operational alert';
-      card.querySelector('.alert-meta').textContent =
-        time + ' | zone: ' + (payload.zone || 'unknown') +
-        ' | station: ' + (payload.station || 'unknown');
-      alerts.prepend(card);
-      while (alerts.children.length > 100) alerts.lastElementChild.remove();
-      alertCount.textContent = seenNotifications.size;
-    }
-
-    async function loadNotificationHistory() {
-      try {
-        const res = await fetch('/notifications');
-        const data = await res.json();
-        (data.notifications || []).forEach(renderNotification);
-      } catch (err) { /* history loading is best effort */ }
-    }
-
-    function connectNotificationStream() {
-      const stream = new EventSource('/notifications/stream');
-      stream.onmessage = event => renderNotification(JSON.parse(event.data));
-    }
-
-    loadNotificationHistory();
-    connectNotificationStream();
 
     const SUGGESTIONS = [
       "List all suspicious-activity zones",

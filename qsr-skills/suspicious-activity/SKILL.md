@@ -26,11 +26,7 @@ Map each request to the required capability below, then choose the compatible
 tool from `describe`. If no compatible tool is available, explain that the
 service contract does not support the request rather than guessing.
 
-Critical food-safety events are escalated through the MCP `subscribe` contract
-after the event is persisted. The QSR operator UI registers a subscription for
-`report_suspicious_activity` where `severity == critical`; do not wait for a
-user query and do not attempt an MCP action because this service exposes no
-runtime action tools.
+This service exposes no runtime action tools; do not attempt an MCP action.
 
 ## Capability Routing
 
@@ -62,10 +58,6 @@ together, and distinguish observed facts from recommendations. A single snapshot
 does not prove a historical trend unless multiple time points are returned.
 
 ## Notify Actions
-
-Automatic critical notification is not an agent action. The QSR UI subscribes
-to the remote SAD MCP endpoint, and the SDK sends the event callback after
-`ServiceServer.emit` writes the event to durable storage.
 
 `notify_operator` surfaces an event to the store operator. It is automatic and
 rate-limited, but a diagnostic question never authorizes a notification.

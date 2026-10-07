@@ -1,7 +1,7 @@
 # Test-only Hermes registrations for the simulated MCP services. Merge this
 # block into ~/.hermes/config.yaml and replace the repository path.
-# The servers import mcp-service-sdk, so they are launched with the SDK venv
-# interpreter (.venv/mcp), created by scripts/setup.sh.
+# The servers use FastMCP, so they are launched with the MCP venv interpreter
+# (.venv/mcp), created by scripts/setup.sh.
 platform_toolsets:
   cli:
     - kiosk

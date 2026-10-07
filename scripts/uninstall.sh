@@ -40,6 +40,16 @@ stop_operator_ui() {
     pkill -f 'operator-ui/app.py' 2>/dev/null || true
 }
 
+stop_weather_service() {
+    log "Stopping weather MCP service"
+    local pid_file=/tmp/qsr-weather-service.pid
+    if [[ -f "$pid_file" ]]; then
+        local pid; pid=$(cat "$pid_file" 2>/dev/null || true)
+        [[ -n "$pid" ]] && kill "$pid" 2>/dev/null || true
+        rm -f "$pid_file"
+    fi
+}
+
 preserve_uv() {
     # Move uv/uvx out of ~/.hermes/bin into ~/.local/bin so they survive removal.
     [[ $KEEP_UV == 1 ]] || return 0
@@ -100,6 +110,7 @@ verify() {
 main() {
     stop_processes
     stop_operator_ui
+    stop_weather_service
     preserve_uv
     remove_launchers
     remove_data

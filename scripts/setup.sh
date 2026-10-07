@@ -11,11 +11,6 @@ OVMS_CONTAINER=${OVMS_CONTAINER:-ovms-qwen3-8b}
 OVMS_PORT=${OVMS_PORT:-4444}
 HERMES_CONFIG=${HERMES_CONFIG:-"$HOME/.hermes/config.yaml"}
 HERMES_INSTALL_URL=${HERMES_INSTALL_URL:-https://hermes-agent.nousresearch.com/install.sh}
-# The SDK is always installed from Git (no local-checkout dependency).
-SDK_GIT_URL=${SDK_GIT_URL:-https://github.com/sachinkaushik/edge-ai-libraries.git}
-SDK_GIT_REF=${SDK_GIT_REF:-mcp}
-SDK_SUBDIR=${SDK_SUBDIR:-frameworks/mcp-service-sdk}
-SDK_INSTALL_DIR=""
 # Optional: pin Hermes to a validated commit (full 40-char SHA). The installer
 # tracks `main` by default, and newer builds have changed behavior (e.g. a
 # >=64K context-window requirement). Set this to the SHA the stack was
@@ -23,12 +18,8 @@ SDK_INSTALL_DIR=""
 HERMES_INSTALL_COMMIT=${HERMES_INSTALL_COMMIT:-}
 SETUP_VENV=${SETUP_VENV:-"$ROOT_DIR/.venv/qsr-setup"}
 SETUP_TARGET=${SETUP_TARGET:-"$ROOT_DIR/.venv/qsr-setup-target"}
-# NOTE: we intentionally do NOT use `pip install git+...#subdirectory=...`. pip
-# would run `git submodule update --init --recursive` and pull the entire
-# edge-ai-libraries submodule tree (anomalib, flann, geti, ...), stalling setup.
-# resolve_sdk_dir clones only the SDK subdirectory (sparse, no submodules).
-# Dedicated venv whose interpreter launches the kiosk/order-accuracy MCP servers.
-# Hermes runs those as subprocesses, so their launcher must have mcp-service-sdk.
+# Dedicated venv whose interpreter launches the FastMCP kiosk/order-accuracy
+# MCP servers and the operator UI (autonomy). Hermes runs the servers as subprocesses.
 MCP_VENV=${MCP_VENV:-"$ROOT_DIR/.venv/mcp"}
 MCP_VENV_PY="$MCP_VENV/bin/python"
 # Operator UI: started automatically at the end of setup. Set START_UI=false to
@@ -43,10 +34,14 @@ WARM_UP_UI=${WARM_UP_UI:-false}
 # restrict to loopback.
 QSR_UI_HOST=${QSR_UI_HOST:-0.0.0.0}
 QSR_UI_PORT=${QSR_UI_PORT:-8600}
-# YAML is the normal subscription source. QSR_MCP_SUBSCRIPTIONS remains an
-# optional JSON override for CI and generated deployments.
-SUBSCRIBE_EVENTS_FILE=${SUBSCRIBE_EVENTS_FILE:-"$ROOT_DIR/agent-config/hermes/subscribe-events.yaml"}
-QSR_MCP_SUBSCRIPTIONS=${QSR_MCP_SUBSCRIPTIONS:-}
+# Weather MCP service (services/weather), installed into the MCP venv. Keep the
+# port in sync with the `weather` entry in agent-config/hermes/remote-mcp.example.yaml.
+START_WEATHER=${START_WEATHER:-true}
+WEATHER_SERVICE_DIR="$ROOT_DIR/services/weather"
+WEATHER_HOST=${WEATHER_HOST:-127.0.0.1}
+WEATHER_PORT=${WEATHER_PORT:-8090}
+# Set by start_weather_service; empty disables weather reads in autonomy.
+WEATHER_MCP_URL=""
 # Registrations are convention-based, not per-service code: each QSR sim is a
 # tests/mcp-services/<name>_server.py (auto-discovered), and real apps register
 # themselves via their own launch. This script never changes to add a service.
@@ -90,16 +85,14 @@ Optional environment variables:
   HERMES_INSTALL_URL  Hermes installer URL
     SETUP_VENV          Helper virtual environment path
     SETUP_TARGET        Fallback isolated dependency path
-    SDK_GIT_URL         Git URL for mcp-service-sdk (default sachinkaushik fork)
-    SDK_GIT_REF         Git ref/branch for mcp-service-sdk (default mcp)
-    SDK_SUBDIR          Repo subdirectory holding the SDK
     MCP_VENV            Venv that launches the sim MCP servers
     START_UI            Auto-start the operator UI after setup (default true)
     WARM_UP_UI          Run one warm-up UI chat request during setup (default false)
     QSR_UI_HOST         Operator UI bind host (default 0.0.0.0)
     QSR_UI_PORT         Operator UI bind port (default 8600)
-    SUBSCRIBE_EVENTS_FILE  Event subscription YAML path
-    QSR_MCP_SUBSCRIPTIONS  Optional JSON override for event subscriptions
+    START_WEATHER       Start the weather MCP service (default true)
+    WEATHER_HOST        Weather service bind host (default 127.0.0.1)
+    WEATHER_PORT        Weather service port (default 8090)
 EOF
 }
 
@@ -215,46 +208,18 @@ ensure_helper_venv() {
     SETUP_PYTHON="$SETUP_VENV/bin/python"
 }
 
-ensure_test_sdk() {
-    resolve_sdk_dir
-    log "Installing mcp-service-sdk for local service tests from $SDK_INSTALL_DIR"
-    if [[ -n $SETUP_PYTHONPATH ]]; then
-        python3 -m pip install --quiet --upgrade --target "$SETUP_TARGET" "$SDK_INSTALL_DIR[mcp]"
-    else
-        "$SETUP_PYTHON" -m pip install --quiet --upgrade "$SDK_INSTALL_DIR[mcp]"
-    fi
-}
-
-# Fetch the SDK from Git only, without submodules. Installing via pip's
-# `git+...#subdirectory=...` runs `git submodule update --init --recursive`,
-# which clones the whole edge-ai-libraries submodule tree and stalls setup. A
-# shallow, sparse, no-submodule clone of just the SDK subdir is git-only and
-# fast. Cached in SDK_INSTALL_DIR so we clone at most once per run.
-resolve_sdk_dir() {
-    [[ -n $SDK_INSTALL_DIR && -f "$SDK_INSTALL_DIR/pyproject.toml" ]] && return
-    local dest
-    dest=$(mktemp -d)
-    log "Fetching mcp-service-sdk from $SDK_GIT_URL@$SDK_GIT_REF (sparse, no submodules)"
-    git clone --depth 1 --filter=blob:none --sparse --no-recurse-submodules \
-        --branch "$SDK_GIT_REF" "$SDK_GIT_URL" "$dest" >/dev/null 2>&1 ||
-        fail "Could not clone mcp-service-sdk from $SDK_GIT_URL@$SDK_GIT_REF"
-    git -C "$dest" sparse-checkout set "$SDK_SUBDIR" >/dev/null 2>&1 ||
-        fail "Could not sparse-checkout $SDK_SUBDIR"
-    [[ -f "$dest/$SDK_SUBDIR/pyproject.toml" ]] ||
-        fail "Cloned SDK is missing pyproject.toml at $dest/$SDK_SUBDIR"
-    SDK_INSTALL_DIR="$dest/$SDK_SUBDIR"
-}
-
 ensure_mcp_venv() {
     if [[ ! -x "$MCP_VENV_PY" ]]; then
         log "Creating MCP service venv at $MCP_VENV"
         python3 -m venv "$MCP_VENV" || fail "Could not create $MCP_VENV. Install python3-venv."
     fi
     "$MCP_VENV_PY" -m pip install --quiet --upgrade pip
-    resolve_sdk_dir
-    log "Installing mcp-service-sdk into the MCP service venv from $SDK_INSTALL_DIR"
-    "$MCP_VENV_PY" -m pip install --quiet --upgrade "$SDK_INSTALL_DIR[mcp]" -r "$ROOT_DIR/autonomy/requirements.txt" ||
-        fail "Failed to install mcp-service-sdk into $MCP_VENV"
+    log "Installing FastMCP service, weather service, and autonomy dependencies into $MCP_VENV"
+    "$MCP_VENV_PY" -m pip install --quiet --upgrade \
+        -r "$ROOT_DIR/tests/mcp-services/requirements.txt" \
+        -r "$ROOT_DIR/autonomy/requirements.txt" \
+        -e "$WEATHER_SERVICE_DIR" ||
+        fail "Failed to install MCP service dependencies into $MCP_VENV"
 }
 
 setup_python() {
@@ -263,53 +228,6 @@ setup_python() {
     else
         "$SETUP_PYTHON" "$@"
     fi
-}
-
-load_event_subscriptions() {
-    if [[ -n "$QSR_MCP_SUBSCRIPTIONS" ]]; then
-        log "Using QSR_MCP_SUBSCRIPTIONS environment override"
-        return
-    fi
-    if [[ ! -f "$SUBSCRIBE_EVENTS_FILE" ]]; then
-        QSR_MCP_SUBSCRIPTIONS='[]'
-        log "No event subscription file at $SUBSCRIBE_EVENTS_FILE; automatic alerts disabled"
-        return
-    fi
-
-    QSR_MCP_SUBSCRIPTIONS=$(SUBSCRIBE_EVENTS_FILE="$SUBSCRIBE_EVENTS_FILE" setup_python - <<'PY'
-import json
-import os
-from pathlib import Path
-
-import yaml
-
-path = Path(os.environ["SUBSCRIBE_EVENTS_FILE"])
-document = yaml.safe_load(path.read_text()) or {}
-subscriptions = document.get("subscriptions", [])
-if not isinstance(subscriptions, list):
-    raise SystemExit(f"{path}: 'subscriptions' must be a list")
-
-required = {"url", "event_type", "callback_url"}
-enabled = []
-for index, subscription in enumerate(subscriptions):
-    if not isinstance(subscription, dict):
-        raise SystemExit(f"{path}: subscription {index} must be a mapping")
-    if not subscription.get("enabled", True):
-        continue
-    missing = sorted(required - subscription.keys())
-    if missing:
-        raise SystemExit(f"{path}: subscription {index} missing {', '.join(missing)}")
-    enabled.append({
-        "url": str(subscription["url"]),
-        "event_type": str(subscription["event_type"]),
-        "condition": str(subscription.get("condition", "*")),
-        "callback_url": str(subscription["callback_url"]),
-    })
-
-print(json.dumps(enabled, separators=(",", ":")))
-PY
-    ) || fail "Could not load event subscriptions from $SUBSCRIBE_EVENTS_FILE"
-    log "Loaded event subscriptions from $SUBSCRIBE_EVENTS_FILE"
 }
 
 install_hermes() {
@@ -420,9 +338,10 @@ configure_hermes() {
     fi
 
     ROOT_DIR="$ROOT_DIR" HERMES_CONFIG="$HERMES_CONFIG" MODEL_ID="$MODEL_ID" \
-        OVMS_PORT="$OVMS_PORT" \
+        OVMS_PORT="$OVMS_PORT" QSR_WEATHER_MCP_URL="$WEATHER_MCP_URL" \
         setup_python - <<'PY'
 import os
+import re
 import socket
 from pathlib import Path
 from typing import Any
@@ -463,11 +382,25 @@ def replace_repo_path(value: Any) -> Any:
     return value
 
 
+# Same ${VAR} / ${VAR:-default} expansion as the container entrypoint.
+ENV_PATTERN = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}")
+
+
+def expand_env(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: expand_env(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [expand_env(item) for item in value]
+    if isinstance(value, str):
+        return ENV_PATTERN.sub(lambda m: os.environ.get(m.group(1)) or m.group(2) or "", value)
+    return value
+
+
 current = {}
 if config_path.exists():
     current = yaml.safe_load(config_path.read_text()) or {}
 for fragment in fragments:
-    current = merge(current, replace_repo_path(yaml.safe_load(fragment.read_text()) or {}))
+    current = merge(current, expand_env(replace_repo_path(yaml.safe_load(fragment.read_text()) or {})))
 current["model"]["default"] = model_id
 current["model"]["provider"] = "custom"
 current["model"]["base_url"] = ovms_base_url
@@ -475,11 +408,16 @@ current.setdefault("providers", {}).setdefault("custom", {})
 current["providers"]["custom"]["base_url"] = ovms_base_url
 
 # Auto-register the QSR-owned simulation services by convention: every
-# tests/mcp-services/<name>_server.py becomes an MCP server launched by the SDK
+# tests/mcp-services/<name>_server.py becomes an MCP server launched by the MCP
 # venv interpreter. Add a new sim by dropping a *_server.py — no edits here.
 # Entries not managed here (e.g. real apps that self-register via their own
 # `make up`) are preserved because we only touch discovered sim names.
 servers = current.setdefault("mcp_servers", {})
+# Drop remote services whose ${VAR} URL expanded to empty (not configured).
+for name in list(servers):
+    entry = servers[name]
+    if isinstance(entry, dict) and "command" not in entry and not str(entry.get("url", "")).strip():
+        del servers[name]
 venv_py = str(root / ".venv/mcp/bin/python")
 for script in sorted((root / "tests/mcp-services").glob("*_server.py")):
     name = script.stem[: -len("_server")].replace("_", "-")
@@ -542,6 +480,63 @@ PY
     hermes config check </dev/null
 }
 
+warn_weather_disabled() {
+    log "WARNING: $1. Weather reads are disabled; weather/queue events still run without them."
+    WEATHER_MCP_URL=""
+}
+
+# Must run before configure_hermes: Hermes only enables remote MCP servers that
+# are reachable at setup time.
+start_weather_service() {
+    if [[ "${START_WEATHER,,}" != "true" ]]; then
+        log "START_WEATHER=false; not managing the weather MCP service."
+        WEATHER_MCP_URL="http://$WEATHER_HOST:$WEATHER_PORT/mcp"
+        return 0
+    fi
+    local health_url="http://$WEATHER_HOST:$WEATHER_PORT/health"
+    local pid_file="/tmp/qsr-weather-service.pid"
+    local log_file="/tmp/qsr-weather-service.log"
+    local weather_bin="$MCP_VENV/bin/weather-simulator"
+    local pid attempt
+
+    pid=$(cat "$pid_file" 2>/dev/null || true)
+    if [[ -n "$pid" ]] && ps -p "$pid" -o args= 2>/dev/null | grep -q 'weather-simulator serve'; then
+        log "Restarting weather MCP service (pid $pid) to apply code and configuration"
+        kill "$pid" 2>/dev/null || true
+        for attempt in {1..10}; do kill -0 "$pid" 2>/dev/null || break; sleep 0.5; done
+    elif curl -fsS --max-time 2 "$health_url" >/dev/null 2>&1; then
+        log "Using existing weather MCP service at $health_url (not managed by setup)"
+        WEATHER_MCP_URL="http://$WEATHER_HOST:$WEATHER_PORT/mcp"
+        return 0
+    fi
+    rm -f "$pid_file"
+
+    if [[ ! -x "$weather_bin" ]]; then
+        warn_weather_disabled "$weather_bin is missing; rerun setup to install the MCP venv"
+        return 0
+    fi
+
+    log "Starting weather MCP service on http://$WEATHER_HOST:$WEATHER_PORT/mcp"
+    WEATHER_EVENT_WEBHOOK_URL="${WEATHER_EVENT_WEBHOOK_URL:-http://127.0.0.1:$QSR_UI_PORT/autonomy/events}" \
+        WEATHER_STORE_ID="${WEATHER_STORE_ID:-${QSR_RESTAURANT_ID:-qsr-001}}" \
+        WEATHER_LOCATION_NAME="${WEATHER_LOCATION_NAME:-Demo QSR Restaurant}" \
+        nohup "$weather_bin" serve --transport http \
+        --host "$WEATHER_HOST" --port "$WEATHER_PORT" > "$log_file" 2>&1 &
+    echo $! > "$pid_file"
+    for attempt in {1..20}; do
+        if curl -fsS --max-time 2 "$health_url" >/dev/null 2>&1; then
+            WEATHER_MCP_URL="http://$WEATHER_HOST:$WEATHER_PORT/mcp"
+            log "Weather MCP service started (pid $(cat "$pid_file"), log: $log_file)"
+            return 0
+        fi
+        kill -0 "$(cat "$pid_file")" 2>/dev/null || break
+        sleep 1
+    done
+    tail -n 20 "$log_file" >&2 || true
+    rm -f "$pid_file"
+    warn_weather_disabled "Weather MCP service did not become ready on $health_url"
+}
+
 wait_for_operator_ui() {
     local url="$1"
     local pid_file="$2"
@@ -572,12 +567,12 @@ start_operator_ui() {
     local probe_host="$QSR_UI_HOST"
     [[ "$probe_host" == "0.0.0.0" ]] && probe_host="127.0.0.1"
     local url="http://$probe_host:$QSR_UI_PORT/health"
-    local pid current_args current_subscriptions
+    local pid current_args current_weather
     pid=$(cat "$pid_file" 2>/dev/null || true)
     if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
-        current_subscriptions=$(tr '\0' '\n' </proc/"$pid"/environ 2>/dev/null | sed -n 's/^QSR_MCP_SUBSCRIPTIONS=//p' || true)
+        current_weather=$(tr '\0' '\n' </proc/"$pid"/environ 2>/dev/null | sed -n 's/^QSR_WEATHER_MCP_URL=//p' || true)
         if curl -fsS --max-time 2 "$url" >/dev/null 2>&1 &&
-            [[ "$current_subscriptions" == "$QSR_MCP_SUBSCRIPTIONS" ]]; then
+            [[ "$current_weather" == "$WEATHER_MCP_URL" ]]; then
             log "Operator UI already running (pid $pid, http://$QSR_UI_HOST:$QSR_UI_PORT)"
             return 0
         fi
@@ -594,7 +589,7 @@ start_operator_ui() {
     fi
     log "Starting operator UI on http://$QSR_UI_HOST:$QSR_UI_PORT"
     QSR_UI_HOST="$QSR_UI_HOST" QSR_UI_PORT="$QSR_UI_PORT" \
-        QSR_MCP_SUBSCRIPTIONS="$QSR_MCP_SUBSCRIPTIONS" \
+        QSR_WEATHER_MCP_URL="$WEATHER_MCP_URL" \
         nohup "$MCP_VENV_PY" -u "$ui" > "$log_file" 2>&1 &
     echo $! > "$pid_file"
     if ! wait_for_operator_ui "$url" "$pid_file"; then
@@ -640,6 +635,8 @@ validate_stack() {
     log "Running model-independent service tests"
     PYTHONDONTWRITEBYTECODE=1 "$MCP_VENV_PY" -m unittest discover \
         -s "$ROOT_DIR/tests/mcp-services" -p 'test_services.py' -v
+    PYTHONDONTWRITEBYTECODE=1 "$MCP_VENV_PY" -m unittest discover \
+        -s "$WEATHER_SERVICE_DIR/tests"
 }
 
 main() {
@@ -662,11 +659,11 @@ main() {
         start_ovms
         warm_up_model
         ensure_mcp_venv
+        start_weather_service
         configure_hermes
     fi
     validate_stack
     if [[ $CHECK_ONLY == false ]]; then
-        load_event_subscriptions
         start_operator_ui
         warm_up_operator_ui
     fi

@@ -50,6 +50,8 @@ class Capability:
     read_only: bool
     required_reads: tuple[str, ...] = ()
     validate: Callable[[dict[str, Any], dict[str, Any]], None] | None = None
+    # Location-scoped services (e.g. weather) do not report a restaurant identity.
+    store_scoped: bool = True
 
 
 class CapabilityCatalog:
@@ -135,6 +137,8 @@ class CapabilityCatalog:
         result = capability.client.call_tool(capability.tool, arguments)
         if not isinstance(result, dict) or result.get("error") or result.get("isError"):
             raise ValueError(f"{name} did not return usable context")
+        if not capability.store_scoped:
+            return result
         restaurant = result.get("restaurant", {}).get("id")
         if restaurant != self.restaurant_id:
             raise ValueError(f"{name} returned missing or mismatched restaurant identity")
@@ -208,7 +212,7 @@ class HermesEventAgent:
                     for call in reads:
                         if not isinstance(call, dict) or set(call) != {"tool", "arguments"}:
                             raise ValueError("read requires tool and arguments")
-                        name = call["tool"]
+                        name = self._resolve_tool(call["tool"], selected)
                         if not isinstance(name, str) or name not in allowed:
                             raise ValueError("read is not permitted by selected skills")
                         if name in observations:
@@ -250,7 +254,7 @@ class HermesEventAgent:
                     return PolicyEvaluation(False, decision=evidence)
                 if not isinstance(action, dict) or set(action) != {"tool", "arguments"}:
                     raise ValueError("action requires tool and arguments")
-                name = action["tool"]
+                name = self._resolve_tool(action["tool"], selected)
                 if not isinstance(name, str) or name not in self._allowed(selected):
                     raise ValueError("action is not permitted by selected skills")
                 try:
@@ -286,6 +290,14 @@ class HermesEventAgent:
 
     def _allowed(self, selected: dict[str, str]) -> set[str]:
         return {tool for name in selected for tool in self.catalog.skills[name].tools}
+
+    def _resolve_tool(self, name: Any, selected: dict[str, str]) -> Any:
+        # Models sometimes qualify tools with the skill name, e.g. "skill.service.tool".
+        if isinstance(name, str):
+            for skill in selected:
+                if name.startswith(skill + ".") and name[len(skill) + 1:] in self._allowed(selected):
+                    return name[len(skill) + 1:]
+        return name
 
     def _prompt(
         self, event: dict[str, Any], selected: dict[str, str],

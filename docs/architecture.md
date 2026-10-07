@@ -34,54 +34,19 @@ User
 gives Qwen the real MCP schemas directly and removes the deferred
 `tool_search -> tool_describe -> tool_call` wrapper sequence.
 
-## Event Subscription Flow
+## Autonomy Event Flow
 
-The operator UI is also a persistent MCP subscription client. This is separate
-from Hermes, which is invoked per question for conversational reads and actions.
-At UI startup, deployment configuration supplies a generic list of remote MCP
-subscriptions. The UI calls each service's `subscribe` tool with an event type,
-condition, and callback URL.
-
-```text
-QSR operator UI starts
-  -> initialize remote MCP session
-  -> call subscribe(event_type, condition, callback_url)
-
-Domain service emits an event
-  -> append the standard envelope to its durable log
-  -> run normal delivery sinks
-  -> match registered subscriptions
-  -> POST the matching envelope to the callback URL
-  -> QSR UI stores it in the notification queue
-  -> QSR UI pushes it over Server-Sent Events (SSE)
-  -> browser renders it immediately in the Automatic Alerts panel
-```
-
-The browser performs one `GET /notifications` when the page opens to restore
-the backend's retained in-memory history. It then keeps a
-`GET /notifications/stream` SSE connection open for new events; there is no
-periodic alert polling.
-
-For example, Suspicious Activity registers:
-
-```text
-event_type = report_suspicious_activity
-condition = severity == critical
-```
-
-This path is deterministic and does not require an LLM decision. Hermes remains
-available for follow-up investigation through the service's read tools.
-
-Subscriptions are currently process-local. Restarting a domain MCP service
-clears its registrations, so the operator UI must register again. Subscriptions
-are forward-only: existing durable events are not replayed automatically.
+Event producers POST to the Operator UI `/autonomy/events` webhook. The UI
+queues each event durably, Hermes selects skills and MCP reads, and any proposed
+action waits for operator approval in the right-side Autonomy decisions panel.
+See [Autonomous decisions](autonomy.md).
 
 ## Repository Layout
 
 ```text
-mcp-service-sdk (Git package)     Shared service contract and policy library
+services/weather/                 Weather MCP service (simulator or Open-Meteo), events, Dockerfile
 tests/mcp-services/
-  service_runtime.py              Transport selection only
+  service_base.py                 FastMCP service contract, policy gate, tool-call log
   service_launcher.py             Chooses one domain service per process
   kiosk_server.py                 Kiosk domain contract and implementation
   order_accuracy_server.py        Accuracy domain contract and implementation
@@ -134,11 +99,11 @@ Do not configure both `url` and `command` for the same server. Keep the working
 stdio registration until the corresponding remote endpoint passes the agent's
 MCP connectivity test, then replace it atomically.
 
-Event subscriptions require connectivity in both directions:
+Remote services that produce autonomy events need connectivity in both directions:
 
 ```text
 QSR machine -> service-machine /mcp
-service machine -> QSR-machine /notifications
+service machine -> QSR-machine /autonomy/events
 ```
 
 Use routable DNS names or IP addresses for separate machines. Put both endpoints

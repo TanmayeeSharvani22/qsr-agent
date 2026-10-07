@@ -20,6 +20,35 @@ Each action requires read dependencies and an owner validator. Every skill
 exposing that action must include those reads. Skill text guides decisions;
 catalog permissions, not event content or skill prose, authorize tools.
 
+## Adding Another Event Skill
+
+The event agent accepts all event names through its wildcard policy. Adding an
+event such as `equipment_fault_detected` therefore does not require an
+event-to-skill mapping. Add a domain only when Hermes needs new guidance, data,
+or actions:
+
+1. Expose typed read and action tools from the owning MCP service. Register each
+    action with an appropriate service-side `GateLevel`; application approval is
+    not a substitute for service authorization.
+2. Register each tool as a namespaced `Capability`. Every action capability
+    must declare its required read capabilities and a deterministic owner
+    validator.
+3. Create a `SKILL.md` describing relevant event types, required evidence,
+    action bounds, and when no action is appropriate. A skill provides reasoning
+    guidance and tool visibility, not authorization.
+4. Register the `Skill` with all reads and actions it may use. Every required
+    read for an action must be included in the same skill.
+5. Send the new event to `POST /autonomy/events` and test both no-action and
+    pending-proposal outcomes, approval, rejection, and a direct unauthorized
+    MCP action call.
+
+Hermes chooses the smallest relevant skill set at runtime and may combine
+several skills and services for one event. It may request at most four reads in
+one reasoning round. Each event produces at most one proposed action; expose a
+service-owned atomic bundle action when several related writes must succeed
+together. If an event only needs existing capabilities and guidance, no new
+Python event policy is needed.
+
 ## Extension module
 
 Create an importable Python module in the project, for example
