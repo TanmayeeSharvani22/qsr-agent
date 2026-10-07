@@ -17,13 +17,13 @@ fresh tool call is available. Each event is one detected violation with a `zone`
 
 ## Contract Discovery
 
-Before the first suspicious-activity request in a conversation, call the
-`describe` MCP tool to confirm the available tools, schemas, and event types.
-`describe` returns service metadata, not live food-safety evidence.
+The SAD tools are already registered with their schemas; route requests with the
+table below and call the data tool directly. Call `describe` only when the
+operator asks what the service offers. `describe` returns service metadata, not
+live food-safety evidence.
 
-Map each request to the required capability below, then choose the compatible
-tool from `describe`. If no compatible tool is available, explain that the
-service contract does not support the request rather than guessing.
+If no tool below fits the request, explain that the service contract does not
+support it rather than guessing.
 
 This is a read-only sensor service. It exposes `describe` and read tools only;
 there are no SAD MCP tools for notifying operators, opening cases, or changing
@@ -41,7 +41,7 @@ runtime state. Do not claim to perform those actions through SAD.
 | How often / which station and shift | `Get_trend_counts` | optional `zone`, `event_name`, `use_case`, time bounds | Report returned station/shift buckets only. State explicit time bounds only when the operator provided them; otherwise say the buckets are across the current SAD log. This tool counts events; it does not compare against a baseline. |
 | Last N days / per-day counts / daily trend | `Get_daily_counts` | `days` (default 7); optional `zone`, `event_name`, `use_case` | Do not compute dates, sums, or trends yourself. For each zone, report its returned `summary` (total, every listed day with events, and `trend`). Never report a single day's count as the window total. |
 | Severity threshold count | `Get_event_count` | `minimum_severity` | `minimum_severity="high"` includes both high and critical events. Do not describe it as an exact-severity count. |
-| Frame evidence | `Search_retrospective_frames` | `frame`, `frame_refs`, `frame_count` | Each record is one event; show one row per `ref_id`, never one row per frame. `frame_refs` holds at most 3 sample references and `frame_count` the total stored. If empty, say no frame reference was returned; do not claim an image was fetched or displayed. |
+| Frame evidence | `Search_retrospective_frames` | `frame`, `frame_refs`, `frame_count` | Each record is one event; show one row per `ref_id`, never one row per frame. `frame_refs` holds one sample reference and `frame_count` the total stored. If empty, say no frame reference was returned; do not claim an image was fetched or displayed. |
 
 ## Complex Questions
 
