@@ -1,7 +1,7 @@
 ---
 name: suspicious-activity
 description: "Answer kitchen food-safety and suspicious-activity questions using SAD MCP read tools for zones, events, time ranges, frame references, counts, and station/shift trends."
-version: 1.1.0
+version: 1.0.0
 platforms: [linux]
 metadata:
   hermes:
