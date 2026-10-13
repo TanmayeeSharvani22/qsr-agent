@@ -48,6 +48,9 @@ HERMES_RESPONSE_STYLE = os.environ.get(
     "Use the relevant tool before answering factual or numeric questions. Do not estimate missing values. Answer in one short sentence unless the user explicitly asks for detail.",
 )
 HERMES_IDLE_DONE_SECONDS = float(os.environ.get("HERMES_IDLE_DONE_SECONDS", "3"))
+# Reject oversized requests before reading the body or invoking Hermes.
+MAX_BODY_BYTES = int(os.environ.get("QSR_MAX_BODY_BYTES", "65536"))
+MAX_QUESTION_CHARS = int(os.environ.get("QSR_MAX_QUESTION_CHARS", "4000"))
 WARMUP_ENABLED = os.environ.get("QSR_WARMUP", "true").strip().lower() not in {"0", "false", "no"}
 WARMUP_PROMPT = os.environ.get("QSR_WARMUP_PROMPT", "Warm up. Reply with OK only.")
 # Set once warm-up concludes; /ready (and the container healthcheck) gates on it.
@@ -335,7 +338,17 @@ class Handler(BaseHTTPRequestHandler):
         if self.path not in ("/ask", "/ask/stream", "/autonomy/events") and not is_autonomy_proposal:
             self._send(404, b'{"ok":false,"error":"not found"}', "application/json")
             return
-        length = int(self.headers.get("Content-Length", "0") or "0")
+        try:
+            length = int(self.headers.get("Content-Length", "0") or "0")
+        except ValueError:
+            self._send(400, b'{"ok":false,"error":"invalid Content-Length"}', "application/json")
+            return
+        if length < 0:
+            self._send(400, b'{"ok":false,"error":"invalid Content-Length"}', "application/json")
+            return
+        if length > MAX_BODY_BYTES:
+            self._send(413, b'{"ok":false,"error":"request too large"}', "application/json")
+            return
         raw = self.rfile.read(length) if length else b"{}"
         try:
             payload = json.loads(raw or b"{}")
@@ -387,6 +400,9 @@ class Handler(BaseHTTPRequestHandler):
         question = (payload.get("question") or "").strip()
         if not question:
             self._send(400, b'{"ok":false,"error":"empty question"}', "application/json")
+            return
+        if len(question) > MAX_QUESTION_CHARS:
+            self._send(413, b'{"ok":false,"error":"question too long"}', "application/json")
             return
         if self.path == "/ask/stream":
             self._stream_answer(question)
