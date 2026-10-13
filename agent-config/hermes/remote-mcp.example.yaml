@@ -51,6 +51,16 @@ mcp_servers:
     connect_timeout: 15
     timeout: 60
 
+  # Digital Signage (product-detection-driven advertising). Runs as the web-ui
+  # container's in-process MCP server (streamable-http on :5100); port is
+  # published on the digital-signage host via docker-compose.yml.
+  digital-signage:
+    url: ${QSR_DIGITAL_SIGNAGE_MCP_URL:-http://host.docker.internal:5100/mcp}
+    transport: streamable-http
+    enabled: true
+    connect_timeout: 15
+    timeout: 120
+
   # Template — copy for a remote, authenticated service on another host:
   # your-service:
   #   url: https://your-service.example.internal/mcp
