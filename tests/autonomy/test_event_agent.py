@@ -655,7 +655,17 @@ class InputGuardrailTests(unittest.TestCase):
             sock.sendall(
                 b"POST /ask HTTP/1.1\r\nHost: localhost\r\n"
                 b"Content-Type: application/json\r\nContent-Length: abc\r\n\r\n")
-            response = sock.recv(1024)
+            sock.settimeout(3)
+            deadline = time.monotonic() + 3
+            response = b""
+            while b"invalid Content-Length" not in response and time.monotonic() < deadline:
+                try:
+                    part = sock.recv(1024)
+                except socket.timeout:
+                    break
+                if not part:
+                    break
+                response += part
         self.assertIn(b"400", response.split(b"\r\n", 1)[0])
         self.assertIn(b"invalid Content-Length", response)
 
