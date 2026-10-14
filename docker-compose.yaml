@@ -58,7 +58,7 @@ services:
   # `make weather CONDITION=rain TEMP=12`; for real weather set
   # WEATHER_BACKEND=open-meteo plus WEATHER_LATITUDE/WEATHER_LONGITUDE.
   weather:
-    image: ${WEATHER_IMAGE:-qsr-weather:local}
+    image: ${WEATHER_IMAGE:-intel/qsr-weather:${TAG}}
     build:
       context: ./services/weather
       args: *proxy-build-args
@@ -83,7 +83,7 @@ services:
       - qsr
 
   qsr-agent:
-    image: ${QSR_IMAGE:-intel/qsr-agent:latest}
+    image: ${QSR_IMAGE:-intel/qsr-agent:${TAG}}
     build:
       context: .
       dockerfile: Dockerfile

@@ -7,6 +7,7 @@ import tempfile
 import threading
 import time
 import unittest
+import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from datetime import UTC, datetime
@@ -593,6 +594,80 @@ class EventAgentTests(unittest.TestCase):
         client = StdioMcpClient(Path(sys.executable), Path("tests/mcp-services/kiosk_server.py"), timeout=0.01)
         with self.assertRaisesRegex(RuntimeError, "timed out"):
             client.call_tool("get_kiosk_context")
+
+
+class InputGuardrailTests(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self._env = patch.dict("os.environ", {
+            "QSR_AUTONOMY_DB": str(Path(self._tmp.name) / "state.db"),
+            "QSR_AUTONOMY_MODULES": "",
+            "QSR_WARMUP": "false",
+            "QSR_MAX_BODY_BYTES": "200",
+            "QSR_MAX_QUESTION_CHARS": "10",
+        })
+        self._env.start()
+        spec = importlib.util.spec_from_file_location("qsr_guardrail_http_test", "operator-ui/app.py")
+        self.app = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.app)
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), self.app.Handler)
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        self.opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        self.base = f"http://127.0.0.1:{self.server.server_port}"
+
+    def tearDown(self):
+        self.server.shutdown()
+        self.thread.join()
+        self.server.server_close()
+        self.app.AUTONOMY.store.close()
+        self._env.stop()
+        self._tmp.cleanup()
+
+    def _post(self, path, body):
+        request = urllib.request.Request(
+            self.base + path, data=body,
+            headers={"Content-Type": "application/json"}, method="POST")
+        try:
+            with self.opener.open(request, timeout=3) as response:
+                return response.status, json.load(response)
+        except urllib.error.HTTPError as error:
+            return error.code, json.load(error)
+
+    def test_oversized_body_is_rejected_before_processing(self):
+        status, payload = self._post("/ask", json.dumps({"question": "x" * 500}).encode())
+        self.assertEqual(status, 413)
+        self.assertEqual(payload["error"], "request too large")
+
+    def test_oversized_question_is_rejected(self):
+        status, payload = self._post("/ask", json.dumps({"question": "x" * 50}).encode())
+        self.assertEqual(status, 413)
+        self.assertEqual(payload["error"], "question too long")
+
+    def test_empty_question_is_rejected(self):
+        status, payload = self._post("/ask", json.dumps({"question": "  "}).encode())
+        self.assertEqual(status, 400)
+        self.assertEqual(payload["error"], "empty question")
+
+    def test_malformed_content_length_is_rejected(self):
+        import socket
+        with socket.create_connection(("127.0.0.1", self.server.server_port), timeout=3) as sock:
+            sock.sendall(
+                b"POST /ask HTTP/1.1\r\nHost: localhost\r\n"
+                b"Content-Type: application/json\r\nContent-Length: abc\r\n\r\n")
+            sock.settimeout(3)
+            deadline = time.monotonic() + 3
+            response = b""
+            while b"invalid Content-Length" not in response and time.monotonic() < deadline:
+                try:
+                    part = sock.recv(1024)
+                except socket.timeout:
+                    break
+                if not part:
+                    break
+                response += part
+        self.assertIn(b"400", response.split(b"\r\n", 1)[0])
+        self.assertIn(b"invalid Content-Length", response)
 
 
 if __name__ == "__main__":

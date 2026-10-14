@@ -37,6 +37,7 @@ if str(_ROOT_PATH) not in sys.path:
     sys.path.insert(0, str(_ROOT_PATH))
 
 from autonomy.worker import build_controller
+from autonomy.input_guardrail import DECLINE_MESSAGE, build_input_guardrail
 
 HOST = os.environ.get("QSR_UI_HOST", "0.0.0.0")
 PORT = int(os.environ.get("QSR_UI_PORT", "8600"))
@@ -45,9 +46,16 @@ HERMES_TIMEOUT = float(os.environ.get("HERMES_TIMEOUT", "300"))
 HERMES_REASONING = os.environ.get("HERMES_REASONING", "low")
 HERMES_RESPONSE_STYLE = os.environ.get(
     "HERMES_RESPONSE_STYLE",
-    "Use the relevant tool before answering factual or numeric questions. Do not estimate missing values. Answer in one short sentence unless the user explicitly asks for detail.",
+    "Only answer questions about this store's connected services. If the question is "
+    "unrelated to those services (for example general knowledge, trivia, math, or coding), "
+    "do not answer it and reply exactly: \"I can only help with questions about this store's "
+    "connected services.\" Use the relevant tool before answering factual or numeric questions. "
+    "Do not estimate missing values. Answer in one short sentence unless the user explicitly asks for detail.",
 )
 HERMES_IDLE_DONE_SECONDS = float(os.environ.get("HERMES_IDLE_DONE_SECONDS", "3"))
+# Reject oversized requests before reading the body or invoking Hermes.
+MAX_BODY_BYTES = int(os.environ.get("QSR_MAX_BODY_BYTES", "65536"))
+MAX_QUESTION_CHARS = int(os.environ.get("QSR_MAX_QUESTION_CHARS", "4000"))
 WARMUP_ENABLED = os.environ.get("QSR_WARMUP", "true").strip().lower() not in {"0", "false", "no"}
 WARMUP_PROMPT = os.environ.get("QSR_WARMUP_PROMPT", "Warm up. Reply with OK only.")
 # Set once warm-up concludes; /ready (and the container healthcheck) gates on it.
@@ -57,6 +65,7 @@ if not WARMUP_ENABLED:
 
 _INDEX_PATH = Path(__file__).parent / "static" / "index.html"
 AUTONOMY = build_controller(_ROOT_PATH)
+INPUT_GUARDRAIL = build_input_guardrail(_ROOT_PATH / "qsr-skills")
 
 
 def _resolve_hermes() -> str | None:
@@ -335,7 +344,17 @@ class Handler(BaseHTTPRequestHandler):
         if self.path not in ("/ask", "/ask/stream", "/autonomy/events") and not is_autonomy_proposal:
             self._send(404, b'{"ok":false,"error":"not found"}', "application/json")
             return
-        length = int(self.headers.get("Content-Length", "0") or "0")
+        try:
+            length = int(self.headers.get("Content-Length", "0") or "0")
+        except ValueError:
+            self._send(400, b'{"ok":false,"error":"invalid Content-Length"}', "application/json")
+            return
+        if length < 0:
+            self._send(400, b'{"ok":false,"error":"invalid Content-Length"}', "application/json")
+            return
+        if length > MAX_BODY_BYTES:
+            self._send(413, b'{"ok":false,"error":"request too large"}', "application/json")
+            return
         raw = self.rfile.read(length) if length else b"{}"
         try:
             payload = json.loads(raw or b"{}")
@@ -388,11 +407,35 @@ class Handler(BaseHTTPRequestHandler):
         if not question:
             self._send(400, b'{"ok":false,"error":"empty question"}', "application/json")
             return
+        if len(question) > MAX_QUESTION_CHARS:
+            self._send(413, b'{"ok":false,"error":"question too long"}', "application/json")
+            return
+        if not INPUT_GUARDRAIL.is_allowed(question):
+            if self.path == "/ask/stream":
+                self._stream_text(DECLINE_MESSAGE)
+            else:
+                self._send(200, json.dumps({"ok": True, "answer": DECLINE_MESSAGE}).encode("utf-8"), "application/json")
+            return
         if self.path == "/ask/stream":
             self._stream_answer(question)
             return
         result = ask_hermes(question)
         self._send(200, json.dumps(result).encode("utf-8"), "application/json")
+
+    def _stream_text(self, text: str) -> None:
+        """Server-Sent Events: emit a single fixed message, then done."""
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-store, no-cache, max-age=0")
+        self.send_header("Connection", "close")
+        self.end_headers()
+        try:
+            self.wfile.write(b": stream-open\n\n")
+            self.wfile.write(f"data: {json.dumps({'event': 'delta', 'text': text})}\n\n".encode("utf-8"))
+            self.wfile.write(f"data: {json.dumps({'event': 'done'})}\n\n".encode("utf-8"))
+            self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            return
 
     def _stream_answer(self, question: str) -> None:
         """Server-Sent Events: emit answer chunks as hermes generates them."""
