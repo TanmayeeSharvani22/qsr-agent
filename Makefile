@@ -17,11 +17,13 @@ HOST_GID ?= $(shell id -g)
 WEATHER_PORT ?= 8090
 RENDER_DEVICE ?= $(firstword $(wildcard /dev/dri/renderD*))
 RENDER_GID ?= $(shell if [ -n "$(RENDER_DEVICE)" ]; then stat -c '%g' "$(RENDER_DEVICE)"; else echo 992; fi)
+TAG ?= latest
 
 export MODEL_ROOT MODEL_ID OVMS_PORT QSR_UI_PORT QSR_UI_HOST
 export HERMES_INSTALL_COMMIT QSR_IMAGE TAG
 export HOST_UID HOST_GID RENDER_GID
 export WEATHER_PORT
+export TAG
 
 .PHONY: init-env check build build-ready up up-ready down restart logs status download-models weather
 
