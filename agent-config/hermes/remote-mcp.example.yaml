@@ -24,14 +24,51 @@ mcp_servers:
     timeout: 60
 
   # Digital Signage (product-detection-driven advertising). Runs as the web-ui
-  # container's in-process MCP server (streamable-http on :5100); port is
-  # published on the digital-signage host via docker-compose.yml.
+  # container's in-process MCP server (streamable-http on :5100), but that port
+  # is NOT published directly on the digital-signage host - all access goes
+  # through its TLS-terminating nginx proxy instead (see that repo's
+  # docs/user-guide/how-to-guides/use-mcp-agent-tools.md). nginx's cert is
+  # self-signed by default (nginx-cert-gen.sh); entrypoint.py's
+  # trust_remote_mcp_certs() fetches and trusts it automatically at startup, so
+  # no manual cert setup is needed for the default same-host deployment below.
+  # Cross-machine deployment: set QSR_DIGITAL_SIGNAGE_MCP_URL to the real host
+  # (host.docker.internal only resolves to THIS container's own host) - the
+  # digital-signage box's own HOST_IP must also be set to its real reachable IP
+  # so its cert's SAN list actually covers that address.
   digital-signage:
-    url: ${QSR_DIGITAL_SIGNAGE_MCP_URL:-http://host.docker.internal:5100/mcp}
+    url: ${QSR_DIGITAL_SIGNAGE_MCP_URL:-https://host.docker.internal:5000/mcp}
     transport: streamable-http
     enabled: true
     connect_timeout: 15
     timeout: 120
+
+  # EdgeMart café-day sim (customers, orders, tables, queue) from the
+  # qsr-store-pos-agent repo's `sim-service-mcp` compose service
+  # (streamable-http on :3101). See that repo's backend/src/sim-service/SIM-SERVICE.md.
+  edgemart-sim-service:
+    url: ${EDGEMART_SIM_MCP_URL:-http://host.docker.internal:3101/mcp}
+    transport: streamable-http
+    enabled: true
+    connect_timeout: 15
+    timeout: 60
+
+  # EdgeMart table occupancy & cleaning sim, same repo's `table-sim-service-mcp`
+  # compose service (streamable-http on :3201).
+  edgemart-table-sim-service:
+    url: ${EDGEMART_TABLE_SIM_MCP_URL:-http://host.docker.internal:3201/mcp}
+    transport: streamable-http
+    enabled: true
+    connect_timeout: 15
+    timeout: 60
+
+  # EdgeMart footfall/movement sim (read-only), same repo's
+  # `footfall-sim-service-mcp` compose service (streamable-http on :3301).
+  edgemart-footfall-sim-service:
+    url: ${EDGEMART_FOOTFALL_SIM_MCP_URL:-http://host.docker.internal:3301/mcp}
+    transport: streamable-http
+    enabled: true
+    connect_timeout: 15
+    timeout: 60
 
   # Template — copy for a remote, authenticated service on another host:
   # your-service:

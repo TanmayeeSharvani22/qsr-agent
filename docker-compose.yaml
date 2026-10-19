@@ -110,6 +110,10 @@ services:
       QSR_MCP_PYTHON: /opt/qsr/.venv/mcp/bin/python
       # Used by autonomy reads and the `weather` Hermes MCP registration.
       QSR_WEATHER_MCP_URL: ${QSR_WEATHER_MCP_URL:-http://weather:8090/mcp}
+      # EdgeMart sim services (qsr-store-pos-agent repo) Hermes MCP registrations.
+      EDGEMART_SIM_MCP_URL: ${EDGEMART_SIM_MCP_URL:-http://host.docker.internal:3101/mcp}
+      EDGEMART_TABLE_SIM_MCP_URL: ${EDGEMART_TABLE_SIM_MCP_URL:-http://host.docker.internal:3201/mcp}
+      EDGEMART_FOOTFALL_SIM_MCP_URL: ${EDGEMART_FOOTFALL_SIM_MCP_URL:-http://host.docker.internal:3301/mcp}
       SAD_TIMEZONE: ${SAD_TIMEZONE:-Asia/Kolkata}
       # Bypass the corporate proxy for loopback, the compose network, and LAN
       # ranges — remote MCP services (e.g. SAD on a 10.x host) are reached direct.

@@ -5,9 +5,12 @@ from __future__ import annotations
 
 import os
 import re
+import socket
+import ssl
 import subprocess
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import yaml
 
@@ -17,6 +20,8 @@ HERMES_HOME = Path(os.environ.get("HERMES_HOME", str(Path.home() / ".hermes")))
 HERMES_CONFIG = Path(os.environ.get("HERMES_CONFIG", str(HERMES_HOME / "config.yaml")))
 MODEL_ID = os.environ.get("MODEL_ID", "OpenVINO/Qwen3-8B-int4-ov")
 MODEL_URL = os.environ.get("QSR_MODEL_BASE_URL", "http://ovms:8000/v3")
+SYSTEM_CA_BUNDLE = Path("/etc/ssl/certs/ca-certificates.crt")
+REMOTE_MCP_CA_BUNDLE = HERMES_HOME / "remote-mcp-ca-bundle.pem"
 
 
 def _merge(current: Any, update: Any) -> Any:
@@ -63,6 +68,69 @@ def _load_yaml(path: Path) -> dict[str, Any]:
     return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
 
 
+def _fetch_server_cert(host: str, port: int, timeout: float = 5.0) -> str | None:
+    """Best-effort TOFU fetch of a remote MCP server's current TLS leaf cert (PEM).
+    Returns None (logging why) rather than raising, so one unreachable/misconfigured
+    service never blocks the whole container from starting."""
+    try:
+        return ssl.get_server_certificate((host, port), timeout=timeout)
+    except (OSError, ssl.SSLError, socket.timeout) as exc:
+        print(
+            f"[entrypoint] Could not fetch TLS cert for {host}:{port} ({exc}); "
+            "this MCP server may fail TLS verification if it uses a self-signed cert.",
+            flush=True,
+        )
+        return None
+
+
+def trust_remote_mcp_certs(servers: dict[str, Any]) -> None:
+    """Best-effort trust-on-first-use for remote MCP servers using self-signed certs
+    (e.g. digital-signage's nginx proxy, which regenerates its cert on every restart
+    - this runs on every container start too, so it stays in sync with THIS
+    container's restarts; it can still go stale if digital-signage's nginx
+    restarts while this container keeps running).
+
+    This container runs as a non-root user and cannot write to the system CA
+    store or run update-ca-certificates, so instead of trusting system-wide we
+    build our own bundle (system CAs + these fetched certs) and point Hermes's
+    SSL_CERT_FILE at it - the Dockerfile already relies on that env var for
+    Hermes's bundled Python to see any CA bundle at all.
+
+    Security note: TOFU means a result is trusted without separately verifying
+    identity out-of-band, so this is only reasonable on an internal/trusted
+    network, same tradeoff this project already makes with self-signed certs
+    elsewhere (e.g. nginx's own default cert).
+    """
+    fetched: list[str] = []
+    for name, entry in servers.items():
+        if not isinstance(entry, dict):
+            continue
+        url = str(entry.get("url", ""))
+        if not url.startswith("https://"):
+            continue
+        parsed = urlparse(url)
+        if not parsed.hostname:
+            continue
+        cert = _fetch_server_cert(parsed.hostname, parsed.port or 443)
+        if cert:
+            fetched.append(cert)
+            print(f"[entrypoint] Trusting current TLS cert for MCP server '{name}' "
+                  f"({parsed.hostname}:{parsed.port or 443})", flush=True)
+
+    if not fetched:
+        return
+
+    try:
+        base = SYSTEM_CA_BUNDLE.read_text(encoding="utf-8") if SYSTEM_CA_BUNDLE.exists() else ""
+        REMOTE_MCP_CA_BUNDLE.parent.mkdir(parents=True, exist_ok=True)
+        REMOTE_MCP_CA_BUNDLE.write_text(base + "\n" + "\n".join(fetched), encoding="utf-8")
+        REMOTE_MCP_CA_BUNDLE.chmod(0o600)
+        os.environ["SSL_CERT_FILE"] = str(REMOTE_MCP_CA_BUNDLE)
+    except OSError as exc:
+        print(f"[entrypoint] Could not write combined CA bundle ({exc}); "
+              "falling back to the system CA bundle only.", flush=True)
+
+
 def configure_hermes() -> None:
     HERMES_CONFIG.parent.mkdir(parents=True, exist_ok=True)
     config = _load_yaml(HERMES_CONFIG) if HERMES_CONFIG.exists() else {}
@@ -87,6 +155,8 @@ def configure_hermes() -> None:
         if isinstance(entry, dict) and "command" not in entry and not str(entry.get("url", "")).strip():
             del servers[name]
 
+    trust_remote_mcp_certs(servers)
+
     python = str(ROOT / ".venv/mcp/bin/python")
     for script in sorted((ROOT / "tests/mcp-services").glob("*_server.py")):
         name = script.stem[: -len("_server")].replace("_", "-")
@@ -107,9 +177,11 @@ def configure_hermes() -> None:
 
 def main() -> None:
     configure_hermes()
-    os.execv(
+    # Explicit env (not execv's implicit current-environ) so SSL_CERT_FILE always propagates.
+    os.execve(
         str(ROOT / ".venv/mcp/bin/python"),
         [str(ROOT / ".venv/mcp/bin/python"), "-u", str(ROOT / "operator-ui/app.py")],
+        dict(os.environ),
     )
 
 

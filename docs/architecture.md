@@ -110,6 +110,32 @@ Use routable DNS names or IP addresses for separate machines. Put both endpoints
 behind TLS and authentication in production, and restrict ingress to the known
 service and agent hosts.
 
+### Remote MCP TLS trust
+
+For internal/demo HTTPS endpoints that use a self-signed certificate (for
+example the digital-signage project's nginx proxy), `entrypoint.py`'s
+`trust_remote_mcp_certs()` runs once at container startup: it fetches the
+current certificate from every configured `https://` MCP server (trust on
+first use, no out-of-band identity check) and writes a combined bundle
+(system CAs plus these) to `~/.hermes/remote-mcp-ca-bundle.pem`, then points
+`SSL_CERT_FILE` at it before Hermes starts. This keeps the container non-root
+(no write access to the system CA store or `update-ca-certificates`) while
+still letting Hermes verify these endpoints instead of failing outright.
+
+Limitations:
+
+- Only runs once per container start; a server that regenerates its cert on
+  its own restarts (as digital-signage's nginx does) needs this container
+  restarted too, to re-fetch and re-trust the new cert.
+- A server unreachable at this container's startup is skipped silently (logged
+  as a warning); use `make restart` (or a full recreate) once it is reachable.
+- Only applies to the long-running process launched via `os.execv` (the
+  operator UI); ad-hoc `docker exec ... hermes -z` commands start a fresh
+  process with the container's static declared environment and do not see
+  this trust bundle.
+- TOFU is only reasonable on an internal/trusted network; production
+  deployments should use a properly signed certificate instead.
+
 ## Service Owner Contract
 
 Every service owner supplies these artifacts:
