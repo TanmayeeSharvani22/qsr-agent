@@ -5,7 +5,7 @@ version: 1.0.0
 platforms: [linux]
 metadata:
   hermes:
-    tags: [QSR, Digital-Signage, Advertising, Retail-Media]
+    tags: [QSR, Digital-Signage, Advertising, Advertisement, Video, Video-Ad, Promo, Promotion, Retail-Media]
 ---
 
 # Digital Signage
