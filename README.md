@@ -1,7 +1,7 @@
 # QSR Agentic Service
 
 A reusable edge-agent architecture for quick-service restaurants. Hermes
-orchestrates Q&A and actions, Qwen3-8B runs locally through OpenVINO Model
+orchestrates Q&A and actions, Qwen3-30B-A3B-Instruct-2507 (MoE) runs locally through OpenVINO Model
 Server (OVMS) on Intel GPU, and MCP services retain ownership of restaurant
 data, policy, actions, and audit evidence.
 
@@ -123,7 +123,7 @@ Model files under `~/models` and the local venvs (`.venv/`) are left in place.
 
 ## Current Scope
 
-The local reference stack is tested with Hermes, OVMS, and
-`OpenVINO/Qwen3-8B-int4-ov`. Production deployment still requires each service
+The local reference stack uses Hermes, OVMS, and
+`OpenVINO/Qwen3-30B-A3B-Instruct-2507-int4-ov`. Production deployment still requires each service
 owner to connect authoritative data, durable history, authenticated HTTPS MCP
 endpoints, and real action handlers.

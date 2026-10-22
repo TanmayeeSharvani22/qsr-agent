@@ -23,7 +23,7 @@ services:
       - --model_repository_path
       - /models
       - --source_model
-      - ${MODEL_ID:-OpenVINO/Qwen3-8B-int4-ov}
+      - ${MODEL_ID:-OpenVINO/Qwen3-30B-A3B-Instruct-2507-int4-ov}
       - --target_device
       - GPU
       - --tool_parser
@@ -98,7 +98,7 @@ services:
         condition: service_healthy
     environment:
       <<: *proxy-env
-      MODEL_ID: ${MODEL_ID:-OpenVINO/Qwen3-8B-int4-ov}
+      MODEL_ID: ${MODEL_ID:-OpenVINO/Qwen3-30B-A3B-Instruct-2507-int4-ov}
       QSR_MODEL_BASE_URL: http://ovms:8000/v3
       QSR_ADVISOR_BASE_URL: http://ovms:8000/v3
       QSR_UI_HOST: 0.0.0.0

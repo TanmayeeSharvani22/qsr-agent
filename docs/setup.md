@@ -74,7 +74,7 @@ then runs `docker compose up -d`. By default it pulls the pre-built image from
 the registry (`REGISTRY=true`); use `make up REGISTRY=false` to build from source
 instead. Override the image with `REGISTRY_URL` and `TAG` (default
 `intel/qsr-agent:latest`). Download the model first with `make download-models`
-(it fetches `OpenVINO/Qwen3-8B-int4-ov` into `./models`). Useful commands:
+(it fetches `OpenVINO/Qwen3-30B-A3B-Instruct-2507-int4-ov`, ~16 GB, into `./models`). Useful commands:
 
 ```bash
 make download-models
@@ -122,8 +122,8 @@ on the host. It is idempotent and performs these operations:
 2. Installs Hermes with its official installer when `hermes` is absent.
 3. Installs model/YAML helpers in `.venv/qsr-setup`; when venv support is
   unavailable, it uses an isolated `.venv/qsr-setup-target` directory.
-4. Downloads `OpenVINO/Qwen3-8B-int4-ov` to `<repo>/models`.
-5. Pulls the OVMS GPU image and starts `ovms-qwen3-8b` on loopback port 8000.
+4. Downloads `OpenVINO/Qwen3-30B-A3B-Instruct-2507-int4-ov` to `<repo>/models`.
+5. Pulls the OVMS GPU image and starts `ovms-qwen3-30b-a3b` on loopback port 8000.
 6. Installs the weather MCP service from `services/weather` into the MCP venv and
   starts it on `127.0.0.1:8090`, sending `weather_changed` events to the
   Operator UI. Set `START_WEATHER=false` to manage it yourself.
@@ -137,7 +137,7 @@ Validated artifact identities are pinned by default:
 | Component | Identity |
 |---|---|
 | Hermes | v0.20.5 configuration schema 38 or a compatible newer install |
-| Qwen model | `OpenVINO/Qwen3-8B-int4-ov` revision `5c47abf4b8e12ebe8e99745bb0c1ec17e0c0abcc` |
+| Qwen model | `OpenVINO/Qwen3-30B-A3B-Instruct-2507-int4-ov` revision `9268a085a48d496cce87d569f008975258bb70df` |
 | OVMS GPU image | `sha256:2a52cd2bc62d984f35f12b1cf58bb5dffe5f5d57b6ef3349b1b37229a768806b` |
 
 Useful overrides:
@@ -161,7 +161,7 @@ The essential settings are:
 
 ```yaml
 model:
-  default: OpenVINO/Qwen3-8B-int4-ov
+  default: OpenVINO/Qwen3-30B-A3B-Instruct-2507-int4-ov
   provider: local-ovms
   base_url: http://127.0.0.1:8000/v3
   context_length: 65536
@@ -170,7 +170,7 @@ providers:
   local-ovms:
     name: Local OVMS
     base_url: http://127.0.0.1:8000/v3
-    default_model: OpenVINO/Qwen3-8B-int4-ov
+    default_model: OpenVINO/Qwen3-30B-A3B-Instruct-2507-int4-ov
     request_timeout_seconds: 1800
     stale_timeout_seconds: 1800
 tools:
@@ -185,7 +185,7 @@ skills:
 passes actual MCP schemas to Qwen and avoids the deferred
 `tool_search -> tool_describe -> tool_call` wrapper that caused malformed calls.
 The broad built-in-tool disable used during the earlier CPU/Ollama experiment
-is not required for the final OVMS/Qwen3-8B setup. No Hermes source patch is
+is not required for the final OVMS/Qwen3 setup. No Hermes source patch is
 required.
 
 Restart an interactive Hermes process after any configuration or skill change.
@@ -196,12 +196,12 @@ The setup script runs the equivalent of this validated command:
 
 ```bash
 MODEL_ROOT="$PWD/models"
-MODEL_ID=OpenVINO/Qwen3-8B-int4-ov
+MODEL_ID=OpenVINO/Qwen3-30B-A3B-Instruct-2507-int4-ov
 RENDER_NODE=$(find /dev/dri -maxdepth 1 -name 'renderD*' -print -quit)
 RENDER_GROUP=$(stat -c '%g' "$RENDER_NODE")
 
-docker rm -f ovms-qwen3-8b 2>/dev/null || true
-docker run -d --name ovms-qwen3-8b --restart unless-stopped \
+docker rm -f ovms-qwen3-30b-a3b 2>/dev/null || true
+docker run -d --name ovms-qwen3-30b-a3b --restart unless-stopped \
   --user "$(id -u):$(id -g)" \
   -p 127.0.0.1:8000:8000 \
   -v "$MODEL_ROOT:/models" \
@@ -221,7 +221,7 @@ availability with:
 
 ```bash
 curl -fsS http://127.0.0.1:8000/v3/models
-docker logs ovms-qwen3-8b
+docker logs ovms-qwen3-30b-a3b
 ```
 
 ## 5. Run and verify

@@ -12,7 +12,7 @@ set -Eeuo pipefail
 
 HERMES_HOME=${HERMES_HOME:-"$HOME/.hermes"}
 BIN_DIR=${BIN_DIR:-"$HOME/.local/bin"}
-OVMS_CONTAINER=${OVMS_CONTAINER:-ovms-qwen3-8b}
+OVMS_CONTAINER=${OVMS_CONTAINER:-ovms-qwen3-30b-a3b}
 UI_PID_FILE=${UI_PID_FILE:-/tmp/qsr-operator-ui.pid}
 KEEP_DATA=${KEEP_DATA:-0}
 KEEP_UV=${KEEP_UV:-0}

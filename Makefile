@@ -1,7 +1,7 @@
 -include .env
 
 MODEL_ROOT ?= $(CURDIR)/models
-MODEL_ID ?= OpenVINO/Qwen3-8B-int4-ov
+MODEL_ID ?= OpenVINO/Qwen3-30B-A3B-Instruct-2507-int4-ov
 OVMS_PORT ?= 4444
 QSR_UI_PORT ?= 8600
 QSR_UI_HOST ?= 0.0.0.0

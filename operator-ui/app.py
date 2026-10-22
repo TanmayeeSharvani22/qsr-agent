@@ -195,7 +195,7 @@ def ask_hermes(question: str) -> dict:
 
     env = _agent_env(hermes)
 
-    # Lower reasoning effort per invocation to cut latency on the local 8B model;
+    # Lower reasoning effort per invocation to cut latency on the local model;
     # config.yaml sets the default but this keeps the UI fast even if that drifts.
     cmd = [hermes, "--reasoning", HERMES_REASONING, "-z", _prepare_question(question)]
     try:

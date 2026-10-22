@@ -4,7 +4,7 @@
 #
 # Model Download Script for the QSR Agent
 # Downloads the OVMS-served OpenVINO LLM into the repo-local models/ directory:
-#   OpenVINO/Qwen3-8B-int4-ov (pinned revision)
+#   OpenVINO/Qwen3-30B-A3B-Instruct-2507-int4-ov (pinned revision)
 
 set -Eeuo pipefail
 
@@ -13,9 +13,9 @@ PROJECT_ROOT="$(dirname "${SCRIPT_DIR}")"
 
 # Repo-local model tree. OVMS mounts this via docker-compose (MODEL_ROOT).
 MODELS_DIR="${MODELS_DIR:-${PROJECT_ROOT}/models}"
-MODEL_ID="${MODEL_ID:-OpenVINO/Qwen3-8B-int4-ov}"
+MODEL_ID="${MODEL_ID:-OpenVINO/Qwen3-30B-A3B-Instruct-2507-int4-ov}"
 # Pin to the validated commit so downloads are reproducible (matches setup.sh).
-MODEL_REVISION="${MODEL_REVISION:-5c47abf4b8e12ebe8e99745bb0c1ec17e0c0abcc}"
+MODEL_REVISION="${MODEL_REVISION:-9268a085a48d496cce87d569f008975258bb70df}"
 
 TARGET_PATH="${MODELS_DIR}/${MODEL_ID}"
 
