@@ -12,6 +12,12 @@ Skills explain routing and interpretation; they are never sources of live data.
 	from the `weather` MCP service, not kiosk context.
 - Load the `order-accuracy` skill for accuracy, station, mismatch, confidence,
 	alert, remake, or comp requests.
+- Load the `loss-prevention` skill for self-checkout loss scenarios (hidden
+	items, fake scans, product switching, sweethearting), lane activity, and
+	age-range mix / signage requests.
+- Age-range results are sampled `detections`, not headcounts: report them as
+	detections even when the question asks about people, and say they are not
+	unique visitors.
 - Call `get_kiosk_context` and `get_order_accuracy_context` once each when a
 	question combines both domains, then correlate only fields sharing the same
 	restaurant identity and compatible observation windows.

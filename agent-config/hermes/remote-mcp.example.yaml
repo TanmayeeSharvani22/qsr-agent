@@ -7,7 +7,14 @@ mcp_servers:
   # Suspicious Activity (kitchen food safety). SAD runs its own MCP service via
   # `make up` in the storewide-loss-prevention repo (streamable-http on :9000).
   suspicious-activity:
-    url: http://127.0.0.1:9000/mcp
+    url: ${QSR_SAD_MCP_URL}
+    transport: streamable-http
+    enabled: true
+    connect_timeout: 15
+    timeout: 120
+
+  loss-prevention:
+    url: ${QSR_LP_MCP_URL}
     transport: streamable-http
     enabled: true
     connect_timeout: 15

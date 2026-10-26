@@ -10,6 +10,7 @@ TAG ?= latest
 REGISTRY ?= true
 REGISTRY_URL ?= intel/
 QSR_IMAGE ?= $(REGISTRY_URL)qsr-agent:$(TAG)
+WEATHER_IMAGE ?= $(REGISTRY_URL)qsr-weather:$(TAG)
 REGISTRY_LOWER := $(shell echo $(REGISTRY) | tr A-Z a-z)
 HERMES_INSTALL_COMMIT ?=
 HOST_UID ?= $(shell id -u)
@@ -20,7 +21,7 @@ RENDER_GID ?= $(shell if [ -n "$(RENDER_DEVICE)" ]; then stat -c '%g' "$(RENDER_
 TAG ?= latest
 
 export MODEL_ROOT MODEL_ID OVMS_PORT QSR_UI_PORT QSR_UI_HOST
-export HERMES_INSTALL_COMMIT QSR_IMAGE TAG
+export HERMES_INSTALL_COMMIT QSR_IMAGE WEATHER_IMAGE TAG
 export HOST_UID HOST_GID RENDER_GID
 export WEATHER_PORT
 export TAG
@@ -45,26 +46,25 @@ build: init-env
 	$(MAKE) --no-print-directory build-ready
 
 build-ready: check
-	docker compose build weather
 	@if [ "$(REGISTRY_LOWER)" = "true" ]; then \
-		echo "Pulling qsr-agent image $(QSR_IMAGE) from registry..."; \
-		docker compose pull qsr-agent; \
+		echo "Pulling images $(QSR_IMAGE) and $(WEATHER_IMAGE) from registry..."; \
+		docker compose pull qsr-agent weather; \
 	else \
-		echo "Building qsr-agent image from source..."; \
-		docker compose build qsr-agent; \
+		echo "Building qsr-agent and weather images from source..."; \
+		docker compose build qsr-agent weather; \
 	fi
 
 up: init-env
 	$(MAKE) --no-print-directory up-ready
 
 up-ready: check
-	docker compose build weather
 	@if [ "$(REGISTRY_LOWER)" = "true" ]; then \
-		echo "Pulling qsr-agent image $(QSR_IMAGE) from registry..."; \
-		docker compose pull qsr-agent; \
+		echo "Pulling images $(QSR_IMAGE) and $(WEATHER_IMAGE) from registry..."; \
+		docker compose pull qsr-agent weather; \
 		docker compose up -d --no-build; \
 	else \
-		docker compose build qsr-agent; \
+		echo "Building qsr-agent and weather images from source..."; \
+		docker compose build qsr-agent weather; \
 		docker compose up -d; \
 	fi
 	@echo "QSR Operator UI: http://localhost:$(QSR_UI_PORT)"

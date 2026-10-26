@@ -25,7 +25,17 @@ make up
 ```
 
 Every `make up` run copies `.env.example` to `.env`, replacing any existing
-`.env`. Edit `.env.example` to configure remote services or other overrides.
+`.env`. Edit `.env.example` (not `.env`) to configure remote services or other
+overrides.
+
+To connect remote MCP services, set their URLs in `.env.example` before
+`make up`. All are optional; set only the services you want, for example just
+Suspicious Activity:
+
+```bash
+QSR_SAD_MCP_URL=http://<sad-host>:9000/mcp
+QSR_LP_MCP_URL=
+```
 
 `make up` starts the Hermes/operator image with OVMS through Docker Compose. By
 default it **pulls** the pre-built image from the registry (`REGISTRY=true`); run
@@ -49,7 +59,8 @@ make down
 ```
 
 Register remote services in `agent-config/hermes/remote-mcp.example.yaml`, setting
-each `url` to a routable MCP address, for example `http://10.0.0.25:9000/mcp`.
+each `url` to a routable MCP address, for example `http://10.0.0.25:9000/mcp`; the
+entries read the URL variables exported in [Quick Start](#quick-start).
 
 The UI also hosts a generic autonomy webhook. Hermes selects relevant skills
 and MCP reads for incoming events; resulting actions wait for approval in the
