@@ -18,7 +18,9 @@ import yaml
 ROOT = Path("/opt/qsr")
 HERMES_HOME = Path(os.environ.get("HERMES_HOME", str(Path.home() / ".hermes")))
 HERMES_CONFIG = Path(os.environ.get("HERMES_CONFIG", str(HERMES_HOME / "config.yaml")))
-MODEL_ID = os.environ.get("MODEL_ID", "OpenVINO/Qwen3-30B-A3B-Instruct-2507-int4-ov")
+MODEL_ID = os.environ.get("MODEL_ID", "")
+if not MODEL_ID:
+    raise SystemExit("MODEL_ID is not set; set it in .env.example.")
 MODEL_URL = os.environ.get("QSR_MODEL_BASE_URL", "http://ovms:8000/v3")
 SYSTEM_CA_BUNDLE = Path("/etc/ssl/certs/ca-certificates.crt")
 REMOTE_MCP_CA_BUNDLE = HERMES_HOME / "remote-mcp-ca-bundle.pem"

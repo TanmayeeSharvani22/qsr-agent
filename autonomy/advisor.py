@@ -92,9 +92,7 @@ class HermesRunner:
         )
         self.timeout = float(os.environ.get("QSR_ADVISOR_TIMEOUT", "90"))
         self.reasoning = os.environ.get("QSR_ADVISOR_REASONING", "none")
-        self.model = os.environ.get("QSR_ADVISOR_MODEL") or os.environ.get(
-            "MODEL_ID", "OpenVINO/Qwen3-30B-A3B-Instruct-2507-int4-ov"
-        )
+        self.model = os.environ.get("QSR_ADVISOR_MODEL") or os.environ.get("MODEL_ID", "")
         self.base_url = os.environ.get(
             "QSR_ADVISOR_BASE_URL", "http://127.0.0.1:4444/v3"
         )

@@ -2,8 +2,15 @@
 set -Eeuo pipefail
 
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-MODEL_ID=${MODEL_ID:-OpenVINO/Qwen3-30B-A3B-Instruct-2507-int4-ov}
-MODEL_REVISION=${MODEL_REVISION:-9268a085a48d496cce87d569f008975258bb70df}
+# Model comes from .env.example (single source); an exported MODEL_ID overrides it.
+MODEL_ID=${MODEL_ID:-$(sed -n 's/^MODEL_ID=//p' "$ROOT_DIR/.env.example")}
+[[ -n "$MODEL_ID" ]] || { echo "[qsr-setup] ERROR: set MODEL_ID in .env.example" >&2; exit 1; }
+case "$MODEL_ID" in
+    OpenVINO/Qwen3-30B-A3B-Instruct-2507-int4-ov) PINNED_REVISION=9268a085a48d496cce87d569f008975258bb70df ;;
+    OpenVINO/Qwen3-8B-int4-ov) PINNED_REVISION=5c47abf4b8e12ebe8e99745bb0c1ec17e0c0abcc ;;
+    *) PINNED_REVISION=main ;;
+esac
+MODEL_REVISION=${MODEL_REVISION:-$PINNED_REVISION}
 MODEL_ROOT=${MODEL_ROOT:-"$ROOT_DIR/models"}
 OVMS_IMAGE=${OVMS_IMAGE:-openvino/model_server@sha256:2a52cd2bc62d984f35f12b1cf58bb5dffe5f5d57b6ef3349b1b37229a768806b}
 OVMS_CONTAINER=${OVMS_CONTAINER:-ovms-qwen3-30b-a3b}

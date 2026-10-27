@@ -1,7 +1,7 @@
 # QSR Agentic Service
 
 A reusable edge-agent architecture for quick-service restaurants. Hermes
-orchestrates Q&A and actions, Qwen3-30B-A3B-Instruct-2507 (MoE) runs locally through OpenVINO Model
+orchestrates Q&A and actions, a local Qwen3 model (set by `MODEL_ID`) runs through OpenVINO Model
 Server (OVMS) on Intel GPU, and MCP services retain ownership of restaurant
 data, policy, actions, and audit evidence.
 
@@ -21,12 +21,20 @@ Git, curl, and approximately 8 GB of free disk.
 ```bash
 git clone https://github.com/intel-retail/qsr-agent.git
 cd qsr-agent
+make download-models   # first run, or after changing MODEL_ID
 make up
 ```
 
 Every `make up` run copies `.env.example` to `.env`, replacing any existing
-`.env`. Edit `.env.example` (not `.env`) to configure remote services or other
-overrides.
+`.env`. Edit `.env.example` (not `.env`) to configure the model, remote services,
+or other overrides.
+
+The model is set only by `MODEL_ID` in `.env.example` (default
+`OpenVINO/Qwen3-8B-int4-ov`). `make download-models` reads it and downloads that
+model into `MODEL_ROOT` (default `./models`); `make up` serves the same model
+through OVMS. To switch models, change `MODEL_ID`, then run
+`make download-models` and `make up` again. Use an OpenVINO model with tool-calling
+support (OVMS runs it with `--tool_parser hermes3`).
 
 To connect remote MCP services, set their URLs in `.env.example` before
 `make up`. All are optional; set only the services you want, for example just
@@ -40,9 +48,10 @@ QSR_LP_MCP_URL=
 `make up` starts the Hermes/operator image with OVMS through Docker Compose. By
 default it **pulls** the pre-built image from the registry (`REGISTRY=true`); run
 `make up REGISTRY=false` to **build from source**. Override the image reference
-with `REGISTRY_URL` and `TAG` (default `intel/qsr-agent:latest`). The model must
-already be present under `MODEL_ROOT/MODEL_ID`; the setup script can still be used
-for the existing host-based installation. Open:
+with `REGISTRY_URL` and `TAG` (default `intel/qsr-agent:latest`). `make up` stops
+with an error if `MODEL_ID` is not set or the model is missing under
+`MODEL_ROOT/MODEL_ID`; run `make download-models` first. The setup script can
+still be used for the existing host-based installation. Open:
 
 ```text
 http://127.0.0.1:8600
@@ -135,6 +144,6 @@ Model files under `~/models` and the local venvs (`.venv/`) are left in place.
 ## Current Scope
 
 The local reference stack uses Hermes, OVMS, and
-`OpenVINO/Qwen3-30B-A3B-Instruct-2507-int4-ov`. Production deployment still requires each service
+the model set by `MODEL_ID` in `.env.example`. Production deployment still requires each service
 owner to connect authoritative data, durable history, authenticated HTTPS MCP
 endpoints, and real action handlers.

@@ -5,7 +5,7 @@
 [Add a service](adding-a-service.md)
 
 This project is a reusable edge-agent pattern for quick-service restaurants.
-Hermes handles conversation and orchestration, Qwen3-30B-A3B-Instruct-2507 runs locally through
+Hermes handles conversation and orchestration, a local Qwen3 model (set by `MODEL_ID` in `.env.example`) runs locally through
 OpenVINO Model Server (OVMS) on an Intel GPU, and independent MCP services own
 restaurant data, actions, policy, and audit evidence.
 

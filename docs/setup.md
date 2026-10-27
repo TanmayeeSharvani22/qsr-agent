@@ -61,6 +61,7 @@ network access to the Hermes installer and Python package indexes.
 ```bash
 git clone https://github.com/intel-retail/qsr-agent.git
 cd qsr-agent
+make download-models
 make up
 ```
 
@@ -73,8 +74,8 @@ lost.
 then runs `docker compose up -d`. By default it pulls the pre-built image from
 the registry (`REGISTRY=true`); use `make up REGISTRY=false` to build from source
 instead. Override the image with `REGISTRY_URL` and `TAG` (default
-`intel/qsr-agent:latest`). Download the model first with `make download-models`
-(it fetches `OpenVINO/Qwen3-30B-A3B-Instruct-2507-int4-ov`, ~16 GB, into `./models`). Useful commands:
+`intel/qsr-agent:latest`). `make up` stops with an error if `MODEL_ID` is not
+set or the model is not under `MODEL_ROOT/MODEL_ID`. Useful commands:
 
 ```bash
 make download-models
@@ -82,6 +83,32 @@ make logs
 make status
 make down
 ```
+
+### Model selection
+
+`MODEL_ID` in `.env.example` is the only place the model is set (default
+`OpenVINO/Qwen3-8B-int4-ov`, ~5 GB). OVMS serves it and Hermes uses it as its
+default model; no other file needs to change.
+
+`make download-models` refreshes `.env` from `.env.example` and downloads
+`MODEL_ID` from Hugging Face into `MODEL_ROOT` (default `./models`). Known models
+are pinned to a validated revision; any other model downloads `main`. Set
+`MODEL_REVISION` to pin a specific commit.
+
+| `MODEL_ID` | Pinned revision | Size |
+|---|---|---|
+| `OpenVINO/Qwen3-8B-int4-ov` (default) | `5c47abf4b8e12ebe8e99745bb0c1ec17e0c0abcc` | ~5 GB |
+| `OpenVINO/Qwen3-30B-A3B-Instruct-2507-int4-ov` | `9268a085a48d496cce87d569f008975258bb70df` | ~16 GB |
+
+To switch models, edit `MODEL_ID` in `.env.example`, then:
+
+```bash
+make download-models
+make up
+```
+
+Use an OpenVINO model that supports tool calling; OVMS runs it with
+`--tool_parser hermes3`.
 
 ### Image source (pull vs build)
 
@@ -122,7 +149,8 @@ on the host. It is idempotent and performs these operations:
 2. Installs Hermes with its official installer when `hermes` is absent.
 3. Installs model/YAML helpers in `.venv/qsr-setup`; when venv support is
   unavailable, it uses an isolated `.venv/qsr-setup-target` directory.
-4. Downloads `OpenVINO/Qwen3-30B-A3B-Instruct-2507-int4-ov` to `<repo>/models`.
+4. Downloads the `MODEL_ID` set in `.env.example` (at its pinned revision) to
+  `<repo>/models`; an exported `MODEL_ID` overrides it.
 5. Pulls the OVMS GPU image and starts `ovms-qwen3-30b-a3b` on loopback port 8000.
 6. Installs the weather MCP service from `services/weather` into the MCP venv and
   starts it on `127.0.0.1:8090`, sending `weather_changed` events to the
@@ -137,7 +165,7 @@ Validated artifact identities are pinned by default:
 | Component | Identity |
 |---|---|
 | Hermes | v0.20.5 configuration schema 38 or a compatible newer install |
-| Qwen model | `OpenVINO/Qwen3-30B-A3B-Instruct-2507-int4-ov` revision `9268a085a48d496cce87d569f008975258bb70df` |
+| Qwen model | `MODEL_ID` from `.env.example`, pinned per model (see [Model selection](#model-selection)) |
 | OVMS GPU image | `sha256:2a52cd2bc62d984f35f12b1cf58bb5dffe5f5d57b6ef3349b1b37229a768806b` |
 
 Useful overrides:
@@ -161,7 +189,7 @@ The essential settings are:
 
 ```yaml
 model:
-  default: OpenVINO/Qwen3-30B-A3B-Instruct-2507-int4-ov
+  default: ${MODEL_ID}   # expanded from .env.example at start-up
   provider: local-ovms
   base_url: http://127.0.0.1:8000/v3
   context_length: 65536
@@ -170,7 +198,7 @@ providers:
   local-ovms:
     name: Local OVMS
     base_url: http://127.0.0.1:8000/v3
-    default_model: OpenVINO/Qwen3-30B-A3B-Instruct-2507-int4-ov
+    default_model: ${MODEL_ID}
     request_timeout_seconds: 1800
     stale_timeout_seconds: 1800
 tools:
@@ -196,7 +224,7 @@ The setup script runs the equivalent of this validated command:
 
 ```bash
 MODEL_ROOT="$PWD/models"
-MODEL_ID=OpenVINO/Qwen3-30B-A3B-Instruct-2507-int4-ov
+MODEL_ID=$(sed -n 's/^MODEL_ID=//p' .env.example)
 RENDER_NODE=$(find /dev/dri -maxdepth 1 -name 'renderD*' -print -quit)
 RENDER_GROUP=$(stat -c '%g' "$RENDER_NODE")
 

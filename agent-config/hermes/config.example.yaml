@@ -10,7 +10,8 @@
 # context_length note: current Hermes requires a >=64000-token window; the model
 # supports 262144, but OVMS KV cache (--cache_size) bounds the usable window.
 model:
-  default: OpenVINO/Qwen3-30B-A3B-Instruct-2507-int4-ov
+  # Set MODEL_ID in .env.example; the same value is served by OVMS.
+  default: ${MODEL_ID}
   provider: custom
   base_url: http://127.0.0.1:4444/v3
   api_key: "local-ovms-no-auth"

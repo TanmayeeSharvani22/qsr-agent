@@ -1,7 +1,6 @@
 -include .env
 
 MODEL_ROOT ?= $(CURDIR)/models
-MODEL_ID ?= OpenVINO/Qwen3-30B-A3B-Instruct-2507-int4-ov
 OVMS_PORT ?= 4444
 QSR_UI_PORT ?= 8600
 QSR_UI_HOST ?= 0.0.0.0
@@ -26,19 +25,23 @@ export HOST_UID HOST_GID RENDER_GID
 export WEATHER_PORT
 export TAG
 
-.PHONY: init-env check build build-ready up up-ready down restart logs status download-models weather
+.PHONY: init-env check build build-ready up up-ready down restart logs status download-models download-models-ready weather
 
 init-env:
 	@cp .env.example .env
 	@echo "Refreshed .env from .env.example"
 
-download-models:
+download-models: init-env
+	$(MAKE) --no-print-directory download-models-ready
+
+download-models-ready:
 	bash download_models/model_download.sh
 
 check:
 	@command -v docker >/dev/null || { echo "Docker is required" >&2; exit 1; }
 	@docker info >/dev/null || { echo "Docker daemon is not available to this user" >&2; exit 1; }
 	@test -n "$(RENDER_DEVICE)" -a -e "$(RENDER_DEVICE)" || { echo "No Intel render device found at /dev/dri/render*" >&2; exit 1; }
+	@test -n "$(MODEL_ID)" || { echo "MODEL_ID is not set; set it in .env.example" >&2; exit 1; }
 	@test -f "$(MODEL_ROOT)/$(MODEL_ID)/config.json" || { echo "Model missing: $(MODEL_ROOT)/$(MODEL_ID)/config.json. Download it first or set MODEL_ROOT/MODEL_ID." >&2; exit 1; }
 	@docker compose version >/dev/null
 
