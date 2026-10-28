@@ -5,4 +5,5 @@ __pycache__
 models
 results
 tests/mcp-services/logs
-operator-ui/static/*.map
+operator-ui/frontend/node_modules
+operator-ui/dist

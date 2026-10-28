@@ -1,0 +1,84 @@
+<mxfile>
+  <diagram name="Desktop (>=1051px)">
+    <mxGraphModel>
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="header" value="Header: Intel | QSR Store Agent | Hermes · Qwen3 · MCP" parent="1" vertex="1"
+                style="rounded=0;whiteSpace=wrap;fillColor=#f5f5f5;strokeColor=#999999;align=left;spacingLeft=12;">
+          <mxGeometry x="0" y="0" width="1200" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="theme" value="Button: Theme toggle (light/dark) [PROPOSED - baseline gap]" parent="1" vertex="1"
+                style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#999999;dashed=1;fontSize=10;">
+          <mxGeometry x="940" y="10" width="240" height="36" as="geometry" />
+        </mxCell>
+
+        <mxCell id="services" value="Card: Connected apps (280px)&#xa;count badge" parent="1" vertex="1"
+                style="rounded=1;whiteSpace=wrap;fillColor=#f5f5f5;strokeColor=#999999;verticalAlign=top;align=left;spacingLeft=8;spacingTop=6;">
+          <mxGeometry x="0" y="72" width="280" height="560" as="geometry" />
+        </mxCell>
+        <mxCell id="svc1" value="Status: service name | up / down dot | N tools or offline" parent="1" vertex="1"
+                style="ellipse;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#999999;fontSize=10;">
+          <mxGeometry x="16" y="130" width="248" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="svc2" value="Status: empty / loading / unavailable states" parent="1" vertex="1"
+                style="ellipse;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#999999;fontSize=10;dashed=1;">
+          <mxGeometry x="16" y="186" width="248" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="refresh" value="Button: Refresh (servers + status?force=1 + autonomy)" parent="1" vertex="1"
+                style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#999999;fontSize=10;">
+          <mxGeometry x="16" y="580" width="248" height="36" as="geometry" />
+        </mxCell>
+
+        <mxCell id="chat" value="Card: Operator Chat (flexible width)&#xa;header: title + status text (ready / thinking)" parent="1" vertex="1"
+                style="rounded=1;whiteSpace=wrap;fillColor=#f5f5f5;strokeColor=#999999;verticalAlign=top;align=left;spacingLeft=8;spacingTop=6;">
+          <mxGeometry x="296" y="72" width="560" height="560" as="geometry" />
+        </mxCell>
+        <mxCell id="msgs" value="Message list: assistant welcome, user bubbles (right), assistant bubbles (left), error bubble. Streaming text + typing indicator [PROPOSED via existing /ask/stream]" parent="1" vertex="1"
+                style="rounded=0;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#999999;fontSize=10;">
+          <mxGeometry x="312" y="130" width="528" height="330" as="geometry" />
+        </mxCell>
+        <mxCell id="quick" value="Chips: 5 suggested questions (fill input, do not auto-send)" parent="1" vertex="1"
+                style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#999999;fontSize=10;">
+          <mxGeometry x="312" y="472" width="528" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="input" value="Input: Ask the store agent…" parent="1" vertex="1"
+                style="rounded=0;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#999999;fontSize=10;">
+          <mxGeometry x="312" y="540" width="430" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="send" value="Button: Send" parent="1" vertex="1"
+                style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#999999;fontSize=10;">
+          <mxGeometry x="754" y="540" width="86" height="44" as="geometry" />
+        </mxCell>
+
+        <mxCell id="autonomy" value="Card: Autonomy Decisions (350px)&#xa;pending-count badge | latest event / queue state line" parent="1" vertex="1"
+                style="rounded=1;whiteSpace=wrap;fillColor=#f5f5f5;strokeColor=#999999;verticalAlign=top;align=left;spacingLeft=8;spacingTop=6;">
+          <mxGeometry x="872" y="72" width="328" height="560" as="geometry" />
+        </mxCell>
+        <mxCell id="prop" value="Card: Proposal — title, event context, Hermes summary, [Approve] [Reject] (pending) or status + result text" parent="1" vertex="1"
+                style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#999999;fontSize=10;">
+          <mxGeometry x="888" y="140" width="296" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="decision" value="Card: Event decision (no proposal) — event label, status, assessment progress" parent="1" vertex="1"
+                style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#999999;fontSize=10;">
+          <mxGeometry x="888" y="272" width="296" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="toast" value="Toast: action failed / approve / reject confirmation [PROPOSED - replaces chat-bubble error]" parent="1" vertex="1"
+                style="rounded=1;whiteSpace=wrap;fillColor=#ffffff;strokeColor=#999999;dashed=1;fontSize=10;">
+          <mxGeometry x="888" y="560" width="296" height="56" as="geometry" />
+        </mxCell>
+
+        <mxCell id="footer" value="Footer: © 2026 Intel Corporation" parent="1" vertex="1"
+                style="rounded=0;whiteSpace=wrap;fillColor=#f5f5f5;strokeColor=#999999;">
+          <mxGeometry x="0" y="648" width="1200" height="28" as="geometry" />
+        </mxCell>
+
+        <mxCell id="note" value="Layout: Split Panel / 3-column dashboard (same as live UI). Dashed boxes = proposed additions; everything else exists today. Tablet (721-1050px): columns 220 / flex / 300. Mobile (<=720px): single column, Services collapses into a Sheet, Chat then Autonomy stacked." parent="1" vertex="1"
+                style="text;whiteSpace=wrap;fontSize=10;align=left;">
+          <mxGeometry x="0" y="690" width="1200" height="40" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

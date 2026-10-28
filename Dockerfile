@@ -1,6 +1,16 @@
 # SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 # SPDX-License-Identifier: Apache-2.0
 
+# Operator UI: compile the React app; the runtime image only receives the static output.
+FROM node:20-slim AS ui-builder
+WORKDIR /ui
+COPY operator-ui/frontend/package.json operator-ui/frontend/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY operator-ui/frontend/ ./
+# vite.config.ts writes to ../dist, i.e. /dist inside this stage.
+RUN npm run build
+
+
 FROM python:3.12-slim AS builder
 
 ARG HERMES_INSTALL_URL=https://hermes-agent.nousresearch.com/install.sh
@@ -80,6 +90,7 @@ COPY --from=builder --chown=qsr:qsr /home/qsr/.hermes /home/qsr/.hermes
 COPY --from=builder --chown=qsr:qsr /opt/qsr/.venv /opt/qsr/.venv
 
 COPY --chown=qsr:qsr . .
+COPY --from=ui-builder --chown=qsr:qsr /dist /opt/qsr/operator-ui/dist
 
 EXPOSE 8600
 ENTRYPOINT ["/opt/qsr/.venv/mcp/bin/python", "/opt/qsr/entrypoint.py"]

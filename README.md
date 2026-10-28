@@ -138,7 +138,7 @@ Model files under `~/models` and the local venvs (`.venv/`) are left in place.
 | `tests/mcp-services/` | Runnable Kiosk and Order Accuracy simulations on FastMCP, with a shared policy-gated service base |
 | `qsr-skills/` | Hermes domain routing and interpretation procedures |
 | `agent-config/hermes/` | Local and remote Hermes configuration fragments |
-| `operator-ui/` | Web chat, connected services, and event decision approvals |
+| `operator-ui/` | React web UI (chat, connected services, event decision approvals) and its Python backend; see [docs/operator-ui.md](docs/operator-ui.md) |
 | `scripts/setup.sh` | Idempotent local installation and validation |
 
 ## Current Scope

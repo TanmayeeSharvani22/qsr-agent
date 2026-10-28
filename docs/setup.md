@@ -143,7 +143,8 @@ service machine will not reach the QSR container.
 ### Legacy host setup
 
 `./scripts/setup.sh` remains available for installing Hermes and running the UI
-on the host. It is idempotent and performs these operations:
+on the host. It is idempotent and performs these operations (the UI build
+needs Node.js >= 20.19; see [Operator UI](operator-ui.md)):
 
 1. Validates Linux, Python, Docker, and `/dev/dri` access.
 2. Installs Hermes with its official installer when `hermes` is absent.

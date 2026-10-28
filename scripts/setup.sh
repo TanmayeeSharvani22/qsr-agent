@@ -561,6 +561,20 @@ wait_for_operator_ui() {
     return 1
 }
 
+build_operator_ui_frontend() {
+    local frontend="$ROOT_DIR/operator-ui/frontend"
+    local dist="$ROOT_DIR/operator-ui/dist/index.html"
+    [[ -f "$dist" ]] && return 0
+    [[ -f "$frontend/package.json" ]] || return 0
+    if ! command -v npm >/dev/null 2>&1; then
+        log "operator-ui/dist is missing and npm is not installed; the UI will return 503 until you run: cd operator-ui/frontend && npm ci && npm run build"
+        return 0
+    fi
+    log "Building the operator UI frontend (first run)"
+    (cd "$frontend" && npm ci --no-audit --no-fund && npm run build) \
+        || fail "Operator UI build failed. Needs Node.js >= 20.19; see docs/operator-ui.md"
+}
+
 start_operator_ui() {
     if [[ "${START_UI,,}" != "true" ]]; then
         log "START_UI=false; not starting the operator UI."
@@ -568,6 +582,7 @@ start_operator_ui() {
     fi
     local ui="$ROOT_DIR/operator-ui/app.py"
     [[ -f "$ui" ]] || { log "Operator UI not found at $ui; skipping."; return 0; }
+    build_operator_ui_frontend
     local pid_file="/tmp/qsr-operator-ui.pid"
     local log_file="/tmp/qsr-operator-ui.log"
     # Probe over loopback even when binding on 0.0.0.0.

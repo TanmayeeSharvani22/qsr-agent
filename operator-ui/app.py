@@ -31,6 +31,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import unquote
 
 _ROOT_PATH = Path(__file__).resolve().parent.parent
 if str(_ROOT_PATH) not in sys.path:
@@ -63,7 +64,21 @@ WARMUP_DONE = threading.Event()
 if not WARMUP_ENABLED:
     WARMUP_DONE.set()
 
-_INDEX_PATH = Path(__file__).parent / "static" / "index.html"
+# Compiled React UI (built from operator-ui/frontend with `npm run build`).
+_DIST_DIR = Path(__file__).parent / "dist"
+_ASSET_TYPES = {
+    ".js": "text/javascript; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".woff2": "font/woff2",
+    ".woff": "font/woff",
+    ".svg": "image/svg+xml",
+    ".png": "image/png",
+    ".ico": "image/x-icon",
+    ".map": "application/json",
+}
+_UI_NOT_BUILT = (
+    b"The operator UI has not been built. Run: cd operator-ui/frontend && npm ci && npm run build"
+)
 AUTONOMY = build_controller(_ROOT_PATH)
 INPUT_GUARDRAIL = build_input_guardrail(_ROOT_PATH / "qsr-skills")
 
@@ -315,9 +330,39 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _send_index(self) -> None:
+        try:
+            body = (_DIST_DIR / "index.html").read_bytes()
+        except OSError:
+            self._send(503, _UI_NOT_BUILT, "text/plain; charset=utf-8")
+            return
+        self._send(200, body, "text/html; charset=utf-8")
+
+    def _send_asset(self) -> None:
+        """Serve a hashed build asset from dist/assets; never anything outside it."""
+        relative = self.path.split("?", 1)[0].split("#", 1)[0][len("/assets/"):]
+        assets_root = (_DIST_DIR / "assets").resolve()
+        try:
+            target = (assets_root / unquote(relative)).resolve()
+            content_type = _ASSET_TYPES.get(target.suffix.lower())
+            if "\x00" in relative or content_type is None or not target.is_relative_to(assets_root):
+                raise FileNotFoundError
+            body = target.read_bytes()
+        except (OSError, ValueError):
+            self._send(404, b"not found", "text/plain; charset=utf-8")
+            return
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Cache-Control", "public, max-age=31536000, immutable")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_GET(self) -> None:  # noqa: N802
         if self.path in ("/", "/index.html"):
-            self._send(200, _INDEX_PATH.read_bytes(), "text/html; charset=utf-8")
+            self._send_index()
+        elif self.path.startswith("/assets/"):
+            self._send_asset()
         elif self.path == "/health":
             self._send(200, b'{"status":"ok"}', "application/json")
         elif self.path == "/ready":

@@ -2,7 +2,7 @@
 
 [Repository overview](../README.md) | **Documentation guide** |
 [Setup](setup.md) | [Architecture](architecture.md) |
-[Add a service](adding-a-service.md)
+[Add a service](adding-a-service.md) | [Operator UI](operator-ui.md)
 
 This project is a reusable edge-agent pattern for quick-service restaurants.
 Hermes handles conversation and orchestration, a local Qwen3 model (set by `MODEL_ID` in `.env.example`) runs locally through
@@ -20,6 +20,7 @@ The repository includes:
   FastMCP, with a shared policy-gated service base (`service_base.py`).
 - `qsr-skills/`: Hermes procedures for domain Q&A and actions.
 - `agent-config/hermes/`: reusable local and remote configuration fragments.
+- `operator-ui/`: React operator UI and Python backend ([details](operator-ui.md)).
 - `scripts/setup.sh`: repeatable Linux setup and verification.
 
 The included domain values and actions are simulations. They prove contracts,
