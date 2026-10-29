@@ -192,6 +192,31 @@ class ProposalStore:
             ).fetchall()
         return [json.loads(row["payload_json"]) for row in rows]
 
+    def decision(self, event_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT payload_json FROM event_decisions WHERE event_id = ?", (event_id,)
+            ).fetchone()
+        return json.loads(row["payload_json"]) if row else None
+
+    def latest_event(self) -> dict[str, Any] | None:
+        """Most recently received event with its decision payload and receipt time."""
+        events = self.recent_events(1)
+        return events[0] if events else None
+
+    def recent_events(self, limit: int = 50) -> list[dict[str, Any]]:
+        """Recently received events, newest first, with decision payload and receipt time."""
+        with self._lock:
+            rows = self._connection.execute(
+                """
+                SELECT r.received_at, d.payload_json FROM received_events r
+                JOIN event_decisions d ON d.event_id = r.event_id
+                ORDER BY r.received_at DESC LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return [{"received_at": row["received_at"], **json.loads(row["payload_json"])} for row in rows]
+
     def create(self, proposed: ProposedAction, replace_pending: bool = True) -> dict[str, Any]:
         proposal_id = f"proposal-{uuid.uuid4().hex}"
         created_at = _now()

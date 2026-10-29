@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: (C) 2026 Intel Corporation
 // SPDX-License-Identifier: Apache-2.0
 
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { AutonomyStatus } from "@/api/types";
 import type { AutonomyPhase } from "@/hooks/use-autonomy";
@@ -17,9 +17,11 @@ interface Props {
   fetchedAt: number;
   busy: ReadonlySet<string>;
   onDecide: (id: string, decision: "approve" | "reject") => void;
+  /** Learning summary and card, shown above the decisions. */
+  learning?: ReactNode;
 }
 
-export function AutonomyPanel({ data, phase, error, fetchedAt, busy, onDecide }: Props) {
+export function AutonomyPanel({ data, phase, error, fetchedAt, busy, onDecide, learning }: Props) {
   const items = useMemo(() => (data ? buildAutonomyItems(data) : []), [data]);
   const summary = data ? autonomySummary(data) : phase === "error" ? "Autonomy unavailable" : "Loading…";
   return (
@@ -34,6 +36,7 @@ export function AutonomyPanel({ data, phase, error, fetchedAt, busy, onDecide }:
         <p role="status" className="text-xs text-muted-foreground">{summary}</p>
       </div>
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+        {learning}
         {phase === "error" ? (
           <p role="alert" className="status-error rounded-lg border border-(--status-border) bg-(--status-bg) p-3 text-sm text-(--status-fg)">
             {error ?? "Autonomy unavailable"}

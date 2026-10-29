@@ -2,10 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import type {
+  ActiveEvent,
   AskAnswer,
   AutonomyStatus,
   Decision,
   JsonObject,
+  LearnedRule,
+  LearningStatus,
+  PendingSkill,
   Proposal,
   ProposalDecisionResult,
   ServersResponse,
@@ -180,12 +184,95 @@ export async function fetchAutonomyStatus(signal?: AbortSignal): Promise<Autonom
 export async function decideProposal(
   proposalId: string,
   decision: "approve" | "reject",
+  reason = "",
   signal?: AbortSignal,
 ): Promise<ProposalDecisionResult> {
   const path = `/autonomy/proposals/${encodeURIComponent(proposalId)}/${decision}`;
-  return parseProposalDecision(await requestJson(path, { method: "POST", body: {}, signal }));
+  return parseProposalDecision(await requestJson(path, { method: "POST", body: reason ? { reason } : {}, signal }));
 }
 
-export async function ask(question: string, signal?: AbortSignal): Promise<AskAnswer> {
-  return parseAsk(await requestJson("/ask", { method: "POST", body: { question }, signal }));
+/** `eventId` links the message to a recent store event so the operator's instruction is learnt. */
+export async function ask(question: string, eventId?: string, signal?: AbortSignal): Promise<AskAnswer> {
+  const body = eventId ? { question, event_id: eventId } : { question };
+  return parseAsk(await requestJson("/ask", { method: "POST", body, signal }));
 }
+
+/** Start a fresh Hermes conversation; Hermes memory is kept. */
+export async function newChat(): Promise<void> {
+  const payload = await requestJson("/chat/new", { method: "POST", body: {} });
+  if (!isRecord(payload) || payload.ok !== true) {
+    throw new ApiError("backend", isRecord(payload) && typeof payload.error === "string" ? payload.error : "could not start a new chat");
+  }
+}
+
+const asString = (value: unknown, fallback = "") => (typeof value === "string" ? value : fallback);
+
+function parseRule(value: unknown): LearnedRule | null {
+  if (!isRecord(value)) return null;
+  return {
+    when: asString(value.when),
+    then: asString(value.then),
+    taught: asNumber(value.taught),
+    matched: asNumber(value.matched),
+    rejected: asNumber(value.rejected),
+    new: value.new === true,
+  };
+}
+
+function parsePending(value: unknown): PendingSkill | null {
+  if (!isRecord(value) || typeof value.id !== "string") return null;
+  const rules = (Array.isArray(value.rules) ? value.rules : []).map(parseRule).filter((rule): rule is LearnedRule => rule !== null);
+  return { id: value.id, skill: asString(value.skill, "learned skill"), rules, removed: asNumber(value.removed) };
+}
+
+function parseActiveEvent(value: unknown): ActiveEvent | null {
+  if (!isRecord(value) || typeof value.event_id !== "string") return null;
+  return {
+    event_id: value.event_id,
+    event_type: typeof value.event_type === "string" ? value.event_type : undefined,
+    data: isRecord(value.data) ? value.data : {},
+    age_seconds: asNumber(value.age_seconds),
+  };
+}
+
+export function parseLearningStatus(payload: unknown): LearningStatus {
+  if (!isRecord(payload) || payload.ok !== true) {
+    throw new ApiError("backend", "learning unavailable");
+  }
+  const learner = isRecord(payload.learner) ? payload.learner : {};
+  return {
+    unlearnt_actions: asNumber(payload.unlearnt_actions),
+    pending_skill_writes: asNumber(payload.pending_skill_writes),
+    threshold: asNumber(payload.threshold),
+    ready: (Array.isArray(payload.ready) ? payload.ready : [])
+      .filter(isRecord)
+      .filter((item) => typeof item.service === "string")
+      .map((item) => ({ service: item.service as string, count: asNumber(item.count) })),
+    pending: (Array.isArray(payload.pending) ? payload.pending : [])
+      .map(parsePending)
+      .filter((item): item is PendingSkill => item !== null),
+    learner: {
+      running: learner.running === true,
+      service: typeof learner.service === "string" ? learner.service : null,
+      log: (Array.isArray(learner.log) ? learner.log : []).filter((line): line is string => typeof line === "string"),
+      error: typeof learner.error === "string" ? learner.error : null,
+    },
+    active_event: parseActiveEvent(payload.active_event),
+  };
+}
+
+export async function fetchLearningStatus(signal?: AbortSignal): Promise<LearningStatus> {
+  return parseLearningStatus(await requestJson("/learning/status", { signal }));
+}
+
+async function postLearning(path: string, body: unknown, failure: string): Promise<void> {
+  const payload = await requestJson(path, { method: "POST", body });
+  if (!isRecord(payload) || payload.ok !== true) {
+    throw new ApiError("backend", isRecord(payload) && typeof payload.error === "string" && payload.error ? payload.error : failure);
+  }
+}
+
+export const startLearning = (service: string) => postLearning("/learning/run", { service }, "could not start learning");
+
+export const decideSkill = (pendingId: string, decision: "approve" | "reject") =>
+  postLearning(`/learning/pending/${encodeURIComponent(pendingId)}/${decision}`, {}, "decision failed");

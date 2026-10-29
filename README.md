@@ -1,149 +1,51 @@
-# QSR Agentic Service
+# QSR Store Agent
 
-A reusable edge-agent architecture for quick-service restaurants. Hermes
-orchestrates Q&A and actions, a local Qwen3 model (set by `MODEL_ID`) runs through OpenVINO Model
-Server (OVMS) on Intel GPU, and MCP services retain ownership of restaurant
-data, policy, actions, and audit evidence.
+An AI operations assistant for quick-service restaurants that runs entirely on
+an Intel® edge system. Store staff ask questions in plain language and get
+answers from live store data. The agent also reacts to store events with
+recommendations that a manager approves before anything changes.
 
-```text
-Operator -> Hermes -> OVMS/Qwen -> MCP service -> domain system
-         <- answer  <- tool use  <- typed result <- policy/audit
-```
+The language model runs locally with the OpenVINO™ Model Server on an Intel®
+GPU, so store data never leaves the premises.
 
-The included Kiosk and Order Accuracy services use simulated data. They prove
-the integration contract and are not production restaurant systems.
+![QSR Store Agent architecture](docs/user-guide/_assets/architecture.svg)
 
 ## Quick Start
 
-Prerequisites: Linux, Intel GPU access through `/dev/dri`, Python 3.11+, Docker,
-Git, curl, and approximately 8 GB of free disk.
+Requires Linux, an Intel® GPU, and Docker. See
+[System Requirements](docs/user-guide/get-started/system-requirements.md).
 
 ```bash
 git clone https://github.com/intel-retail/qsr-agent.git
 cd qsr-agent
-make download-models   # first run, or after changing MODEL_ID
+make download-models
 make up
 ```
 
-Every `make up` run copies `.env.example` to `.env`, replacing any existing
-`.env`. Edit `.env.example` (not `.env`) to configure the model, remote services,
-or other overrides.
-
-The model is set only by `MODEL_ID` in `.env.example` (default
-`OpenVINO/Qwen3-8B-int4-ov`). `make download-models` reads it and downloads that
-model into `MODEL_ROOT` (default `./models`); `make up` serves the same model
-through OVMS. To switch models, change `MODEL_ID`, then run
-`make download-models` and `make up` again. Use an OpenVINO model with tool-calling
-support (OVMS runs it with `--tool_parser hermes3`).
-
-To connect remote MCP services, set their URLs in `.env.example` before
-`make up`. All are optional; set only the services you want, for example just
-Suspicious Activity:
+Open `http://<host>:8600` when `make status` shows `qsr-agent` as `healthy`.
 
 ```bash
-QSR_SAD_MCP_URL=http://<sad-host>:9000/mcp
-QSR_LP_MCP_URL=
+make weather CONDITION=rain TEMP=12   # send a demo event
+make logs                             # follow logs
+make down                             # stop
 ```
-
-`make up` starts the Hermes/operator image with OVMS through Docker Compose. By
-default it **pulls** the pre-built image from the registry (`REGISTRY=true`); run
-`make up REGISTRY=false` to **build from source**. Override the image reference
-with `REGISTRY_URL` and `TAG` (default `intel/qsr-agent:latest`). `make up` stops
-with an error if `MODEL_ID` is not set or the model is missing under
-`MODEL_ROOT/MODEL_ID`; run `make download-models` first. The setup script can
-still be used for the existing host-based installation. Open:
-
-```text
-http://127.0.0.1:8600
-```
-
-The UI provides operator chat, connected-service status, and a right-side
-**Autonomy decisions** panel for event assessments and approvals. To use the CLI
-instead, run `docker compose exec qsr-agent hermes`.
-
-```bash
-make logs
-make status
-make down
-```
-
-Register remote services in `agent-config/hermes/remote-mcp.example.yaml`, setting
-each `url` to a routable MCP address, for example `http://10.0.0.25:9000/mcp`; the
-entries read the URL variables exported in [Quick Start](#quick-start).
-
-The UI also hosts a generic autonomy webhook. Hermes selects relevant skills
-and MCP reads for incoming events; resulting actions wait for approval in the
-**Autonomy decisions** panel. See
-[Autonomous decisions](docs/autonomy.md) for runnable examples and extension
-points.
-
-There is no fixed event-to-action mapping. The included catalog supports menu
-availability and order-remake proposals. Extensions add capabilities and skills,
-not event policies. The application validates model-selected reads and proposed
-actions, and records no-action reasons when intervention is not justified.
-
-Weather comes from the weather MCP service in
-[`services/weather`](services/weather/README.md), run as the compose `weather`
-service. Set demo weather, which also sends a `weather_changed` event to the
-autonomy webhook:
-
-```bash
-make weather CONDITION=rain TEMP=12        # clear|cloudy|fog|drizzle|rain|storm|snow
-make weather CONDITION=clear NO_EVENT=1    # change silently
-```
-
-Behind a corporate proxy, export `http_proxy`, `https_proxy`, and `no_proxy`
-before `make up`; they are passed to image builds and containers.
-
-If you kept the default LAN binding, open `http://<host>:8600` from your
-browser. If you set `QSR_UI_HOST=127.0.0.1`, forward the port first when the
-agent is on a remote box:
-Validate an existing installation without changing it:
-
-```bash
-./scripts/setup.sh --check
-```
-
-## Uninstall
-
-Tear down everything setup installed — Hermes, the OVMS container, and the
-operator UI:
-
-```bash
-./scripts/uninstall.sh
-```
-
-Toggles:
-
-- `REMOVE_OVMS=0` — keep the OVMS container.
-- `KEEP_DATA=1` — keep `~/.hermes` (config and history).
-- `KEEP_UV=1` — preserve bundled `uv`/`uvx`.
-
-Model files under `~/models` and the local venvs (`.venv/`) are left in place.
 
 ## Documentation
 
-| Document | Use it for |
-|---|---|
-| [Documentation guide](docs/index.md) | Reading order, repository map, and common tasks |
-| [Complete setup](docs/setup.md) | Prerequisites, Hermes, OVMS, Docker, verification, and troubleshooting |
-| [Architecture](docs/architecture.md) | Ownership, trust boundaries, transports, and deployment |
-| [Autonomous decisions](docs/autonomy.md) | Events, skill selection, capabilities, and approval |
-| [Adding a service](docs/adding-a-service.md) | MCP server/client, Hermes registration, skills, actions, and tests |
+- [Overview](docs/user-guide/index.md)
+- [Get Started](docs/user-guide/get-started.md)
+  - [System Requirements](docs/user-guide/get-started/system-requirements.md)
+  - [Configuration](docs/user-guide/get-started/configuration.md)
+  - [Build from Source](docs/user-guide/get-started/build-from-source.md)
+- [How It Works](docs/user-guide/how-it-works.md)
+- [Operator Guide](docs/user-guide/operator-guide.md)
+- [API Reference](docs/user-guide/api-reference.md)
+- [Troubleshooting](docs/user-guide/troubleshooting.md)
+- [Release Notes](docs/user-guide/release-notes.md)
 
-## Repository Map
+Earlier developer and design documents are kept in [docs/backup](docs/backup/).
 
-| Path | Purpose |
-|---|---|
-| `tests/mcp-services/` | Runnable Kiosk and Order Accuracy simulations on FastMCP, with a shared policy-gated service base |
-| `qsr-skills/` | Hermes domain routing and interpretation procedures |
-| `agent-config/hermes/` | Local and remote Hermes configuration fragments |
-| `operator-ui/` | React web UI (chat, connected services, event decision approvals) and its Python backend; see [docs/operator-ui.md](docs/operator-ui.md) |
-| `scripts/setup.sh` | Idempotent local installation and validation |
+## Security and Contributing
 
-## Current Scope
-
-The local reference stack uses Hermes, OVMS, and
-the model set by `MODEL_ID` in `.env.example`. Production deployment still requires each service
-owner to connect authoritative data, durable history, authenticated HTTPS MCP
-endpoints, and real action handlers.
+See [SECURITY.md](SECURITY.md) to report a vulnerability and
+[CONTRIBUTING.md](CONTRIBUTING.md) to contribute.

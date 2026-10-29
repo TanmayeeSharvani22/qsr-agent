@@ -14,8 +14,8 @@ operator-ui/
   dist/               Production build output (generated, git-ignored)
   frontend/           React + TypeScript + Tailwind CSS v4 + shadcn/ui (Vite)
     src/api/          Typed fetch client and response parsers
-    src/hooks/        State/polling hooks: services, chat, autonomy, theme
-    src/components/   layout, services, chat, autonomy, theme, ui (shadcn)
+    src/hooks/        State/polling hooks: services, chat, autonomy, learning, theme
+    src/components/   layout, services, chat, autonomy, learning, theme, ui (shadcn)
     src/lib/          Display-only formatting and autonomy ordering helpers
   wireframes/         Approved draw.io wireframe
 ```
@@ -23,6 +23,13 @@ operator-ui/
 Three columns (Services, Chat, Autonomy) on desktop, narrower columns on
 tablet, and a stacked layout on phones where Services opens in a drawer.
 Light/dark theme is stored in `localStorage["qsr-theme"]`.
+
+Chat keeps one Hermes conversation; **New chat** starts a fresh one (Hermes
+memory is kept). While a store event is recent, a banner links the next chat
+message to it so the operator's instruction is journaled for learning; rejecting
+a proposal asks for an optional reason. The autonomy column shows the learning
+summary, a **Learn now** card at the threshold, and a review sheet where the
+operator approves or rejects each learned skill (`/learning/*` routes).
 
 ## Requirements
 

@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1050 510" width="1050" height="510" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3c4a5c"/>
+    </marker>
+  </defs>
+  <rect width="1050" height="510" fill="#ffffff"/>
+
+  <!-- Operator -->
+  <rect x="20" y="210" width="150" height="70" rx="8" fill="#f4f6f8" stroke="#3c4a5c"/>
+  <text x="95" y="240" text-anchor="middle" font-weight="600">Store operator</text>
+  <text x="95" y="260" text-anchor="middle" fill="#555">web browser</text>
+
+  <!-- QSR Store Agent machine -->
+  <rect x="200" y="30" width="830" height="315" rx="12" fill="#e9f3fb" stroke="#0068b5" stroke-width="2"/>
+  <text x="615" y="56" text-anchor="middle" font-weight="700" fill="#0068b5">QSR Store Agent · Intel® edge machine</text>
+  <text x="615" y="75" text-anchor="middle" fill="#555" font-size="12">agent and model on their own machine (Docker Compose)</text>
+
+  <!-- Self-learning -->
+  <rect x="225" y="90" width="780" height="80" rx="8" fill="#fff6e0" stroke="#e8a200"/>
+  <text x="285" y="126" text-anchor="middle" font-weight="700" fill="#8a5a00">Self-learning</text>
+  <text x="285" y="145" text-anchor="middle" fill="#555" font-size="12">human-approved</text>
+  <rect x="355" y="100" width="310" height="60" rx="6" fill="#ffffff" stroke="#e8a200"/>
+  <text x="510" y="124" text-anchor="middle" font-weight="600">Operator-taught learner</text>
+  <text x="510" y="144" text-anchor="middle" fill="#555" font-size="12">operator actions → verified rules → skill</text>
+  <rect x="680" y="100" width="315" height="60" rx="6" fill="#ffffff" stroke="#e8a200"/>
+  <text x="837" y="124" text-anchor="middle" font-weight="600">Hermes built-in memory</text>
+  <text x="837" y="144" text-anchor="middle" fill="#555" font-size="12">preferences and store context from chat</text>
+
+  <!-- Runtime -->
+  <rect x="225" y="200" width="200" height="90" rx="8" fill="#ffffff" stroke="#0068b5"/>
+  <text x="325" y="228" text-anchor="middle" font-weight="600">Operator UI  :8600</text>
+  <text x="325" y="248" text-anchor="middle" fill="#555">chat, decisions, approvals</text>
+  <text x="325" y="266" text-anchor="middle" fill="#555">event webhook</text>
+
+  <rect x="470" y="200" width="230" height="90" rx="8" fill="#ffffff" stroke="#0068b5"/>
+  <text x="585" y="228" text-anchor="middle" font-weight="600">Hermes agent</text>
+  <text x="585" y="248" text-anchor="middle" fill="#555">always-on gateway</text>
+  <text x="585" y="266" text-anchor="middle" fill="#555">skills, memory, MCP tools</text>
+
+  <rect x="760" y="200" width="245" height="90" rx="8" fill="#0068b5" stroke="#0068b5"/>
+  <text x="882" y="228" text-anchor="middle" font-weight="600" fill="#ffffff">OpenVINO™ Model Server</text>
+  <text x="882" y="248" text-anchor="middle" fill="#ffffff">Qwen3 INT4 (MODEL_ID)</text>
+  <text x="882" y="270" text-anchor="middle" font-weight="600" fill="#ffffff">Intel® GPU</text>
+
+  <text x="882" y="322" text-anchor="middle" fill="#555" font-size="12">Inference and store data stay on-premises</text>
+
+  <!-- Store services -->
+  <rect x="10" y="385" width="1030" height="110" rx="10" fill="#ffffff" stroke="#3c4a5c" stroke-dasharray="6 4"/>
+  <text x="25" y="405" font-weight="700">Store services (MCP servers)</text>
+  <text x="225" y="405" fill="#555" font-size="12">each runs on its own host, or several share one; each provides context, actions and events</text>
+
+  <rect x="23" y="415" width="115" height="62" rx="6" fill="#f4f6f8" stroke="#3c4a5c"/>
+  <text x="80" y="441" text-anchor="middle" font-weight="600">Kiosk</text>
+  <text x="80" y="460" text-anchor="middle" fill="#555" font-size="11">queue, menu</text>
+  <rect x="150" y="415" width="115" height="62" rx="6" fill="#f4f6f8" stroke="#3c4a5c"/>
+  <text x="207" y="441" text-anchor="middle" font-weight="600">Order accuracy</text>
+  <text x="207" y="460" text-anchor="middle" fill="#555" font-size="11">order checks</text>
+  <rect x="277" y="415" width="115" height="62" rx="6" fill="#f4f6f8" stroke="#3c4a5c"/>
+  <text x="334" y="441" text-anchor="middle" font-weight="600">Weather</text>
+  <text x="334" y="460" text-anchor="middle" fill="#555" font-size="11">sim or Open-Meteo</text>
+  <rect x="404" y="415" width="115" height="62" rx="6" fill="#f4f6f8" stroke="#3c4a5c"/>
+  <text x="461" y="441" text-anchor="middle" font-weight="600">Kitchen safety</text>
+  <text x="461" y="460" text-anchor="middle" fill="#555" font-size="11">suspicious activity</text>
+  <rect x="531" y="415" width="115" height="62" rx="6" fill="#f4f6f8" stroke="#3c4a5c"/>
+  <text x="588" y="441" text-anchor="middle" font-weight="600">Loss prevention</text>
+  <text x="588" y="460" text-anchor="middle" fill="#555" font-size="11">self-checkout</text>
+  <rect x="658" y="415" width="115" height="62" rx="6" fill="#f4f6f8" stroke="#3c4a5c"/>
+  <text x="715" y="441" text-anchor="middle" font-weight="600">Digital signage</text>
+  <text x="715" y="460" text-anchor="middle" fill="#555" font-size="11">in-store ads</text>
+  <rect x="785" y="415" width="115" height="62" rx="6" fill="#f4f6f8" stroke="#3c4a5c"/>
+  <text x="842" y="441" text-anchor="middle" font-weight="600">Tables, footfall</text>
+  <text x="842" y="460" text-anchor="middle" fill="#555" font-size="11">EdgeMart sims</text>
+  <rect x="912" y="415" width="115" height="62" rx="6" fill="#ffffff" stroke="#3c4a5c" stroke-dasharray="4 3"/>
+  <text x="969" y="441" text-anchor="middle" font-weight="600">Your service</text>
+  <text x="969" y="460" text-anchor="middle" fill="#555" font-size="11">any MCP server</text>
+
+  <!-- Flows -->
+  <line x1="170" y1="245" x2="223" y2="245" stroke="#3c4a5c" stroke-width="1.5" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  <line x1="425" y1="245" x2="468" y2="245" stroke="#3c4a5c" stroke-width="1.5" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  <line x1="700" y1="245" x2="758" y2="245" stroke="#3c4a5c" stroke-width="1.5" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  <text x="730" y="236" text-anchor="middle" fill="#3c4a5c" font-size="11">reasoning</text>
+
+  <line x1="400" y1="200" x2="400" y2="162" stroke="#3c4a5c" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="406" y="188" fill="#3c4a5c" font-size="11">operator actions</text>
+  <line x1="560" y1="160" x2="560" y2="198" stroke="#3c4a5c" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="566" y="188" fill="#3c4a5c" font-size="11">approved skill</text>
+  <line x1="690" y1="162" x2="690" y2="198" stroke="#3c4a5c" stroke-width="1.5" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  <text x="696" y="188" fill="#3c4a5c" font-size="11">memory</text>
+
+  <line x1="325" y1="383" x2="325" y2="292" stroke="#3c4a5c" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="331" y="368" fill="#3c4a5c" font-size="12">events</text>
+  <line x1="585" y1="292" x2="585" y2="383" stroke="#3c4a5c" stroke-width="1.5" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  <text x="591" y="368" fill="#3c4a5c" font-size="12">MCP: context and actions</text>
+</svg>

@@ -14,7 +14,7 @@ RUN useradd --create-home --uid 10002 --shell /usr/sbin/nologin weather \
     && chown -R weather:weather /home/weather
 
 WORKDIR /opt/weather-simulator
-COPY pyproject.toml README.md ./
+COPY pyproject.toml ./
 COPY weather_simulator ./weather_simulator
 RUN pip install .
 

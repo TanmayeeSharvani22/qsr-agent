@@ -63,8 +63,13 @@ def build_ovms_classifier(
     """Build a yes/no OVMS classifier; returns None on any transport/parse failure."""
     url = base_url.rstrip("/") + "/chat/completions"
     system = (
-        "Decide whether the question is about a store assistant's topics: "
-        + topics + ". Reply with only 'yes' or 'no'."
+        "You gate messages for a quick-service restaurant's store assistant. Answer 'yes' if the message is "
+        "about this restaurant: its operations, its connected services (" + topics + "), the weather at the "
+        "store, or its people, "
+        "staff, managers, shifts and preferences (for example 'Who is our store manager?'), including anything "
+        "the operator told the assistant to remember. Answer 'no' for "
+        "anything else, such as general knowledge, trivia, math, writing code, jokes or translation. "
+        "Reply with only 'yes' or 'no'."
     )
 
     def classify(question: str) -> bool | None:
@@ -121,11 +126,11 @@ class InputGuardrail:
 
 def build_input_guardrail(skills_dir: Path) -> InputGuardrail:
     enabled = os.environ.get("QSR_SCOPE_GATE", "true").strip().lower() not in {"0", "false", "no"}
-    terms, _descriptions = extract_scope_terms(skills_dir)
+    terms, descriptions = extract_scope_terms(skills_dir)
     classifier = build_ovms_classifier(
-        ", ".join(sorted(terms)),
+        descriptions,
         os.environ.get("QSR_ADVISOR_BASE_URL", "http://127.0.0.1:4444/v3"),
-        os.environ.get("QSR_ADVISOR_MODEL", "OpenVINO/Qwen3-8B-int4-ov"),
+        os.environ.get("QSR_ADVISOR_MODEL") or os.environ.get("MODEL_ID", ""),
         os.environ.get("QSR_ADVISOR_API_KEY", "local-ovms-no-auth"),
         float(os.environ.get("QSR_SCOPE_GATE_TIMEOUT", "15")),
     )

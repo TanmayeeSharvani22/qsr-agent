@@ -81,3 +81,45 @@ export interface ProposalDecisionResult {
 }
 
 export type AskAnswer = { ok: true; answer: string } | { ok: false; error: string };
+
+/** Store event an operator chat message is linked to (the latest event, while still recent). */
+export interface ActiveEvent {
+  event_id: string;
+  event_type?: string;
+  data: JsonObject;
+  age_seconds: number;
+}
+
+export interface LearnedRule {
+  when: string;
+  then: string;
+  taught: number;
+  matched: number;
+  rejected: number;
+  new: boolean;
+}
+
+/** A learned-skill write staged in Hermes, awaiting operator approval. */
+export interface PendingSkill {
+  id: string;
+  skill: string;
+  rules: LearnedRule[];
+  removed: number;
+}
+
+export interface LearnerState {
+  running: boolean;
+  service: string | null;
+  log: string[];
+  error: string | null;
+}
+
+export interface LearningStatus {
+  unlearnt_actions: number;
+  pending_skill_writes: number;
+  threshold: number;
+  ready: { service: string; count: number }[];
+  pending: PendingSkill[];
+  learner: LearnerState;
+  active_event: ActiveEvent | null;
+}

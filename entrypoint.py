@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import os
 import re
+import secrets
+import shutil
 import socket
 import ssl
 import subprocess
@@ -24,6 +26,10 @@ if not MODEL_ID:
 MODEL_URL = os.environ.get("QSR_MODEL_BASE_URL", "http://ovms:8000/v3")
 SYSTEM_CA_BUNDLE = Path("/etc/ssl/certs/ca-certificates.crt")
 REMOTE_MCP_CA_BUNDLE = HERMES_HOME / "remote-mcp-ca-bundle.pem"
+# Hermes memories live on the learning volume so they survive container recreation
+# (~/.hermes itself is baked into the image).
+LEARNING_HOME = Path(os.environ.get("QSR_LEARNING_DIR", str(ROOT / "learning"))) / "hermes"
+EVENTS_PROFILE = os.environ.get("QSR_HERMES_EVENTS_PROFILE", "qsr-events")
 
 
 def _merge(current: Any, update: Any) -> Any:
@@ -168,6 +174,19 @@ def configure_hermes() -> None:
         if not isinstance(server, dict) or server.get("enabled", True)
     ]
     config.setdefault("platform_toolsets", {})["cli"] = sorted(enabled_names)
+    # Operator chat runs on the always-on gateway: MCP services, Hermes memory, and the
+    # skills tools so it can read QSR skills (skill writes need approval, see below).
+    config["platform_toolsets"]["api_server"] = sorted(enabled_names) + ["memory", "skills"]
+    config = _merge(config, _memory_settings())
+    config["skills"].update({"creation_nudge_interval": 0, "write_approval": True})
+    # Chat context budget on the 64k window: drop bulky old tool results without a model
+    # call first, then summarise older turns once the conversation passes about half.
+    config.setdefault("compression", {}).update({
+        "proactive_prune_tokens": int(os.environ.get("QSR_CHAT_PRUNE_TOKENS", "20000")),
+        "proactive_prune_min_result_chars": 2000,
+        "threshold_tokens": int(os.environ.get("QSR_CHAT_COMPRESS_TOKENS", "32000")),
+    })
+    share_memories(HERMES_HOME)
 
     temporary = HERMES_CONFIG.with_suffix(HERMES_CONFIG.suffix + ".tmp")
     temporary.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
@@ -175,6 +194,68 @@ def configure_hermes() -> None:
     temporary.replace(HERMES_CONFIG)
     subprocess.run(["hermes", "config", "migrate"], check=True, stdin=subprocess.DEVNULL)
     subprocess.run(["hermes", "config", "check"], check=True, stdin=subprocess.DEVNULL)
+    configure_events_profile(config)
+
+
+def _memory_settings() -> dict[str, Any]:
+    return {"memory": {
+        "memory_enabled": True,
+        "user_profile_enabled": True,
+        # User turns per chat session between background memory reviews.
+        "nudge_interval": int(os.environ.get("QSR_MEMORY_NUDGE_INTERVAL", "10")),
+    }}
+
+
+def share_memories(home: Path) -> None:
+    """Point a profile's memories/ at the persistent store shared by all QSR profiles."""
+    target = LEARNING_HOME / "memories"
+    target.mkdir(parents=True, exist_ok=True)
+    link = home / "memories"
+    if link.is_symlink():
+        if link.resolve() == target.resolve():
+            return
+        link.unlink()
+    elif link.is_dir():
+        for item in link.iterdir():
+            if not (target / item.name).exists():
+                shutil.move(str(item), str(target / item.name))
+        shutil.rmtree(link)
+    link.parent.mkdir(parents=True, exist_ok=True)
+    link.symlink_to(target, target_is_directory=True)
+
+
+def configure_events_profile(config: dict[str, Any]) -> None:
+    """Event decisions: same model and read-only memory, but no tools at all, so Hermes
+    can only recommend on untrusted events; actions still need operator approval."""
+    home = HERMES_HOME / "profiles" / EVENTS_PROFILE
+    if not (home / "config.yaml").is_file():
+        subprocess.run(["hermes", "profile", "create", EVENTS_PROFILE, "--no-skills", "--no-alias"],
+                       check=True, stdin=subprocess.DEVNULL)
+    profile = _load_yaml(home / "config.yaml")
+    for key in ("model", "providers", "custom_providers", "tools"):
+        if key in config:
+            profile[key] = config[key]
+    profile = _merge(profile, _memory_settings())
+    profile["mcp_servers"] = {}
+    # Toolset without tools: memory notes are still injected into the prompt, but untrusted
+    # event data can never write them.
+    profile["platform_toolsets"] = {"api_server": ["context_engine"]}
+    profile.setdefault("agent", {}).update({
+        "max_turns": 1,
+        "reasoning_effort": os.environ.get("QSR_ADVISOR_REASONING", "none"),
+    })
+    path = home / "config.yaml"
+    path.write_text(yaml.safe_dump(profile, sort_keys=False), encoding="utf-8")
+    path.chmod(0o600)
+    share_memories(home)
+
+    # Fresh per start: the multiplexed gateway authenticates /p/<profile>/ with this key.
+    env_path = home / ".env"
+    lines = env_path.read_text(encoding="utf-8").splitlines() if env_path.is_file() else []
+    lines = [line for line in lines if not line.startswith("API_SERVER_KEY=")]
+    lines.append(f"API_SERVER_KEY={secrets.token_urlsafe(32)}")
+    env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    env_path.chmod(0o600)
 
 
 def main() -> None:

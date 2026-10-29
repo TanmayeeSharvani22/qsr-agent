@@ -36,7 +36,11 @@ KIOSK_CONTEXT = {
         "queue_count": 7,
         "estimated_wait_minutes": 6,
         "active_kiosks": 3,
+        "max_kiosks": 4,
+        "kiosk_mode": "standard",
+        "upsell_enabled": True,
         "staff_on_duty": 8,
+        "baseline_settings": {"kiosk_mode": "standard", "active_kiosks": 3, "upsell_enabled": True},
     },
     "menu": {
         "active_menu_id": "lunch-standard",
@@ -62,6 +66,13 @@ svc.register_event_type(
     "menu_changed",
     schema={"item_id": "str", "available": "bool|None", "price": "float|None", "reason": "str"},
 )
+svc.register_event_type(
+    "queue_count_changed",
+    schema={"queue_count": "int", "previous_queue_count": "int", "estimated_wait_minutes": "int"},
+)
+
+KIOSK_MODES = ("standard", "express")
+SETTING_FIELDS = {"mode": "kiosk_mode", "active_kiosks": "active_kiosks", "upsell_enabled": "upsell_enabled"}
 
 def _state_path() -> Path:
     return Path(
@@ -88,6 +99,25 @@ def _read_kiosk_state() -> dict[str, Any]:
 
 def _read_menu_overrides() -> dict[str, dict[str, Any]]:
     return _read_kiosk_state().get("menu_items", {})
+
+
+def update_operations(changes: dict[str, Any]) -> dict[str, Any]:
+    """Persist operations overrides (queue, wait, kiosk settings); return the merged overrides."""
+    path = _state_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = path.with_suffix(path.suffix + ".lock")
+    with lock_path.open("a+", encoding="utf-8") as lock_file:
+        fcntl.flock(lock_file, fcntl.LOCK_EX)
+        try:
+            state = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+            operations = state.setdefault("operations", {})
+            operations.update(changes)
+            temporary = path.with_suffix(f"{path.suffix}.tmp.{os.getpid()}")
+            temporary.write_text(json.dumps(state, indent=2), encoding="utf-8")
+            temporary.replace(path)
+            return dict(operations)
+        finally:
+            fcntl.flock(lock_file, fcntl.LOCK_UN)
 
 
 def _write_menu_override(item_id: str, change: dict[str, Any]) -> None:
@@ -159,6 +189,7 @@ def get_kiosk_context() -> dict[str, Any]:
     overrides = state.get("menu_items", {})
     for item in context["menu"]["items"]:
         item.update(overrides.get(item["id"], {}))
+    context["operations"].update(state.get("operations", {}))
     for field, variable in (
         ("queue_count", "QSR_QUEUE_COUNT"),
         ("estimated_wait_minutes", "QSR_ESTIMATED_WAIT_MINUTES"),
@@ -257,8 +288,65 @@ def change_menu_items(changes: list[dict[str, Any]], reason: str) -> dict[str, A
     }
 
 
+@svc.act_tool(
+    "update_kiosk_settings",
+    level=GateLevel.AUTOMATIC,
+    description=(
+        "Apply one approved bundle of kiosk operating settings: ordering mode "
+        "(standard or express with customisation skipped), number of active kiosks, "
+        "and upsell prompts. Only the supplied fields change."
+    ),
+)
+def update_kiosk_settings(
+    reason: str,
+    mode: str | None = None,
+    active_kiosks: int | None = None,
+    upsell_enabled: bool | None = None,
+) -> dict[str, Any]:
+    if not isinstance(reason, str) or not reason.strip():
+        raise ValueError("reason is required")
+    requested = {"mode": mode, "active_kiosks": active_kiosks, "upsell_enabled": upsell_enabled}
+    changes = {SETTING_FIELDS[key]: value for key, value in requested.items() if value is not None}
+    if not changes:
+        raise ValueError("at least one of mode, active_kiosks or upsell_enabled is required")
+    if mode is not None and mode not in KIOSK_MODES:
+        raise ValueError(f"mode must be one of: {', '.join(KIOSK_MODES)}")
+    maximum = KIOSK_CONTEXT["operations"]["max_kiosks"]
+    if active_kiosks is not None and (
+        isinstance(active_kiosks, bool) or not isinstance(active_kiosks, int)
+        or not 1 <= active_kiosks <= maximum
+    ):
+        raise ValueError(f"active_kiosks must be an integer between 1 and {maximum}")
+    if upsell_enabled is not None and not isinstance(upsell_enabled, bool):
+        raise ValueError("upsell_enabled must be a boolean")
+    update_operations({**changes, "settings_reason": reason.strip()})
+    return {
+        "status": "accepted",
+        "action_id": f"kiosk-settings-demo-{uuid4().hex}",
+        "placeholder": True,
+        "changes": changes,
+        "reason": reason.strip(),
+        "message": "Placeholder kiosk settings updated; no external kiosk was modified.",
+        "executed_at": datetime.now(UTC).isoformat(),
+    }
+
+
 TOOL_SCHEMAS = {
     "get_kiosk_context": {"type": "object", "properties": {}, "additionalProperties": False},
+    "update_kiosk_settings": {
+        "type": "object",
+        "properties": {
+            "mode": {"type": "string", "enum": list(KIOSK_MODES),
+                     "description": "standard, or express (skips customisation screens)"},
+            "active_kiosks": {"type": "integer", "minimum": 1, "maximum": 4,
+                              "description": "Number of kiosks taking orders"},
+            "upsell_enabled": {"type": "boolean", "description": "Show 'add a drink?' style upsell prompts"},
+            "reason": {"type": "string", "minLength": 1, "description": "Operational reason"},
+        },
+        "required": ["reason"],
+        "minProperties": 2,
+        "additionalProperties": False,
+    },
     "change_menu": {
         "type": "object",
         "properties": {

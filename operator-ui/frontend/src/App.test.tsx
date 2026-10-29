@@ -286,4 +286,100 @@ describe("App", () => {
     expect(screen.getAllByRole("complementary").length).toBeGreaterThan(0);
     await screen.findByText("4 tools");
   });
+
+  const learning = (overrides: Record<string, unknown> = {}) => ({
+    ok: true,
+    unlearnt_actions: 0,
+    pending_skill_writes: 0,
+    threshold: 20,
+    ready: [],
+    pending: [],
+    learner: { running: false, service: null, log: [], error: null },
+    active_event: null,
+    ...overrides,
+  });
+
+  it("New chat starts a fresh Hermes conversation and clears the transcript", async () => {
+    const { calls } = mockBackend({
+      ...baseRoutes(),
+      "/learning/status": () => json(learning()),
+      "POST /ask": () => json({ ok: true, answer: "2 customers" }),
+      "POST /chat/new": () => json({ ok: true }),
+    });
+    renderApp();
+    await sendQuestion("queue?");
+    expect(await screen.findByText("2 customers")).toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole("button", { name: /New chat/ }));
+    await waitFor(() => expect(screen.queryByText("2 customers")).toBeNull());
+    expect(calls.some((c) => c.url === "/chat/new" && c.init?.method === "POST")).toBe(true);
+  });
+
+  it("links chat messages to the recent store event until the operator dismisses it", async () => {
+    const { calls } = mockBackend({
+      ...baseRoutes(),
+      "/learning/status": () =>
+        json(learning({ active_event: { event_id: "q-1", event_type: "queue_count_changed", data: { queue_count: 12 }, age_seconds: 30 } })),
+      "POST /ask": () => json({ ok: true, answer: "done" }),
+    });
+    renderApp();
+    expect(await screen.findByText(/Responding to:/)).toBeInTheDocument();
+    await sendQuestion("switch to express");
+    await screen.findByText("done");
+    const asks = () => calls.filter((c) => c.url === "/ask").map((c) => JSON.parse(String(c.init?.body)));
+    expect(asks()[0]).toEqual({ question: "switch to express", event_id: "q-1" });
+    await userEvent.setup().click(screen.getByRole("button", { name: "Not about this event" }));
+    expect(screen.queryByText(/Responding to:/)).toBeNull();
+    await sendQuestion("thanks");
+    await waitFor(() => expect(asks()).toHaveLength(2));
+    expect(asks()[1]).toEqual({ question: "thanks" });
+  });
+
+  it("sends the operator's rejection reason, and cancelling the prompt keeps the proposal", async () => {
+    const { calls } = mockBackend({
+      ...baseRoutes(),
+      "/autonomy/status": () => json({ ...emptyAutonomy, pending: 1, proposals: [proposal()] }),
+      "POST /autonomy/proposals/p1/reject": () => json({ ok: true, proposal: proposal({ status: "rejected" }) }),
+    });
+    renderApp();
+    const user = userEvent.setup();
+    vi.mocked(window.prompt).mockReturnValueOnce(null);
+    await user.click(await screen.findByRole("button", { name: /Reject: / }));
+    expect(calls.some((c) => c.url.endsWith("/reject"))).toBe(false);
+    vi.mocked(window.prompt).mockReturnValueOnce("  we go express instead  ");
+    await user.click(screen.getByRole("button", { name: /Reject: / }));
+    await waitFor(() => expect(calls.some((c) => c.url.endsWith("/reject"))).toBe(true));
+    expect(calls.find((c) => c.url.endsWith("/reject"))?.init?.body).toBe(JSON.stringify({ reason: "we go express instead" }));
+  });
+
+  it("offers learning at the threshold, then reviews and approves the learned skill", async () => {
+    let state = learning({ unlearnt_actions: 24, ready: [{ service: "kiosk", count: 24 }] });
+    const pendingSkill = {
+      id: "abcd1234",
+      skill: "learned-kiosk",
+      removed: 0,
+      rules: [{ when: "queue_count ≥ 10", then: "mode → express", taught: 14, matched: 14, rejected: 0, new: true }],
+    };
+    const { calls } = mockBackend({
+      ...baseRoutes(),
+      "/learning/status": () => json(state),
+      "POST /learning/run": () => {
+        state = learning({ unlearnt_actions: 24, pending_skill_writes: 1, pending: [pendingSkill] });
+        return json({ ok: true });
+      },
+      "POST /learning/pending/abcd1234/approve": () => {
+        state = learning();
+        return json({ ok: true });
+      },
+    });
+    renderApp();
+    expect(await screen.findByText("Hermes can learn from 24 kiosk operator actions")).toBeInTheDocument();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Learn now" }));
+    expect(JSON.parse(String(calls.find((c) => c.url === "/learning/run")?.init?.body))).toEqual({ service: "kiosk" });
+    expect(await screen.findByText("When queue_count ≥ 10")).toBeInTheDocument();
+    expect(screen.getByText("taught 14× of 14")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Approve skill" }));
+    expect(await screen.findByText("learned-kiosk is approved and active from the next event.")).toBeInTheDocument();
+    expect(calls.some((c) => c.url === "/learning/pending/abcd1234/approve")).toBe(true);
+  });
 });

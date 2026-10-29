@@ -10,6 +10,10 @@ __pycache__/
 operator-ui/__pycache__/
 operator-ui/__pycache__/*.pyc
 operator-ui/__pycache__/app.cpython-312.pyc
+learning/journal/
+learning/runs/
+learning/skills/
+learning/hermes/
 operator-ui/dist/
 operator-ui/frontend/node_modules/
 operator-ui/frontend/*.tsbuildinfo

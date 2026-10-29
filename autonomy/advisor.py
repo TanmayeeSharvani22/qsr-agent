@@ -2,14 +2,12 @@ from __future__ import annotations
 
 import json
 import os
-import signal
-import shutil
-import subprocess
-import tempfile
 import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
+
+from .hermes_gateway import GatewayError, HermesGateway
 
 
 @dataclass(frozen=True)
@@ -86,19 +84,15 @@ def parse_menu_decision(
 
 
 class HermesRunner:
-    def __init__(self, skill_path: Path | None = None) -> None:
-        self.hermes = os.environ.get(
-            "HERMES_BIN", os.path.expanduser("~/.local/bin/hermes")
-        )
+    """Event-decision completions on the always-running gateway's events profile.
+
+    That profile sees Hermes's memory read-only and has no tools, so a decision can
+    only recommend; actions still go through operator approval.
+    """
+
+    def __init__(self, skill_path: Path | None = None, gateway: HermesGateway | None = None) -> None:
         self.timeout = float(os.environ.get("QSR_ADVISOR_TIMEOUT", "90"))
-        self.reasoning = os.environ.get("QSR_ADVISOR_REASONING", "none")
-        self.model = os.environ.get("QSR_ADVISOR_MODEL") or os.environ.get("MODEL_ID", "")
-        self.base_url = os.environ.get(
-            "QSR_ADVISOR_BASE_URL", "http://127.0.0.1:4444/v3"
-        )
-        self.api_key = os.environ.get(
-            "QSR_ADVISOR_API_KEY", "local-ovms-no-auth"
-        )
+        self.gateway = gateway or HermesGateway.events(self.timeout)
         self.skill_path = skill_path or (
             Path(__file__).resolve().parent.parent
             / "qsr-skills/event-menu-decisions/SKILL.md"
@@ -106,98 +100,12 @@ class HermesRunner:
         self._call_lock = threading.Lock()
 
     def complete(self, prompt: str) -> str:
-        hermes = self.hermes if os.path.isfile(self.hermes) else shutil.which(self.hermes)
-        if not hermes:
-            raise RuntimeError(f"Hermes advisor binary not found: {self.hermes}")
-        with self._call_lock, tempfile.TemporaryDirectory(
-            prefix="qsr-hermes-advisor-"
-        ) as temporary:
-            environment = os.environ.copy()
-            environment["HERMES_CHECK_FOR_UPDATES"] = "false"
-            environment["HERMES_IGNORE_RULES"] = "1"
-            environment["HERMES_MAX_ITERATIONS"] = "1"
-            environment.pop("HERMES_KANBAN_TASK", None)
-            environment["NO_PROXY"] = "localhost,127.0.0.1,::1"
-            environment["no_proxy"] = "localhost,127.0.0.1,::1"
-            for proxy_name in (
-                "HTTP_PROXY",
-                "HTTPS_PROXY",
-                "ALL_PROXY",
-                "http_proxy",
-                "https_proxy",
-                "all_proxy",
-            ):
-                environment.pop(proxy_name, None)
+        with self._call_lock:
             try:
-                process = subprocess.Popen(
-                    [
-                        hermes,
-                        "--reasoning",
-                        self.reasoning,
-                        "--toolsets",
-                        "context_engine",
-                        "-z",
-                        prompt,
-                    ],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                    stdin=subprocess.DEVNULL,
-                    cwd=Path(temporary),
-                    env=environment,
-                    start_new_session=True,
-                )
-                try:
-                    stdout, stderr = process.communicate(timeout=self.timeout)
-                except subprocess.TimeoutExpired as error:
-                    os.killpg(process.pid, signal.SIGKILL)
-                    process.wait()
-                    raise RuntimeError(
-                        f"Hermes advisor timed out after {self.timeout:.0f}s"
-                    ) from error
-            except subprocess.TimeoutExpired as error:
-                raise RuntimeError(
-                    f"Hermes advisor timed out after {self.timeout:.0f}s"
-                ) from error
-        if process.returncode != 0:
-            message = (stderr or "Hermes advisor failed").strip()[:1000]
-            raise RuntimeError(message)
-        return stdout
+                return self.gateway.complete(prompt)
+            except GatewayError as error:
+                raise RuntimeError(f"Hermes advisor failed: {error}") from error
 
-    def _config(self) -> dict[str, Any]:
-        return {
-            "check_for_updates": False,
-            "model": {
-                "provider": "custom",
-                "name": self.model,
-                "default": self.model,
-                "context_length": 64000,
-                "max_tokens": 128,
-                "streaming": False,
-            },
-            "custom_providers": [
-                {
-                    "name": "custom",
-                    "base_url": self.base_url,
-                    "api_key": self.api_key,
-                    "model": self.model,
-                    "models": [self.model],
-                    "api_mode": "chat",
-                    "context_length": 64000,
-                    "request_timeout_seconds": self.timeout,
-                    "stale_timeout_seconds": self.timeout,
-                    "extra_body": {
-                        "chat_template_kwargs": {"enable_thinking": False}
-                    },
-                }
-            ],
-            "agent": {
-                "max_turns": 1,
-                "run_budget_seconds": self.timeout,
-                "reasoning_effort": self.reasoning,
-            },
-            "tools": {"tool_search": {"enabled": False}},
-        }
 
 class HermesMenuAdvisor(HermesRunner):
     def decide(

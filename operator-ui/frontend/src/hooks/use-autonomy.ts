@@ -52,10 +52,10 @@ export function useAutonomy(onActionError?: (text: string) => void) {
   useInterval(() => void load(), AUTONOMY_POLL_MS);
 
   const decide = useCallback(
-    async (proposalId: string, decision: "approve" | "reject") => {
+    async (proposalId: string, decision: "approve" | "reject", reason = "") => {
       setBusy((previous) => new Set(previous).add(proposalId));
       try {
-        const result = await decideProposal(proposalId, decision);
+        const result = await decideProposal(proposalId, decision, reason);
         const proposal = result.proposal;
         const title = proposal ? actionTitle(proposal) : "Action";
         if (decision === "reject") toast.success(`Rejected: ${title}`);

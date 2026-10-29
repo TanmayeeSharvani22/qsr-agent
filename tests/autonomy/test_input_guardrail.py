@@ -89,6 +89,16 @@ class InputGuardrailHttpTests(unittest.TestCase):
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["answer"], self.app.DECLINE_MESSAGE)
 
+    def test_linked_event_does_not_bypass_the_gate(self):
+        decision = {"event": {"service": "kiosk", "event_type": "queue_count_changed", "data": {"queue_count": 12}}}
+        asked = []
+        self.app.INPUT_GUARDRAIL = InputGuardrail(
+            {"kiosk", "queue"}, lambda text: asked.append(text) or "replying to a kiosk" in text and "normal" in text)
+        self.assertFalse(self.app.in_scope("What is the capital of India?", decision))
+        self.assertTrue(self.app.in_scope("ok, back to normal", decision))
+        self.assertFalse(self.app.in_scope("ok, back to normal", None))
+        self.assertIn("Store operator replying to a kiosk queue_count_changed event: ok, back to normal", asked)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,6 +1,6 @@
 # Autonomous Decisions
 
-[Repository overview](../README.md) | [Documentation guide](index.md) |
+[Repository overview](README.original.md) | [Documentation guide](index.md) |
 [Architecture](architecture.md)
 
 The generic event agent lets Hermes select skills and MCP reads from a trusted
@@ -50,7 +50,7 @@ operator approves the proposal.
 The operator UI displays the latest received weather event. It does not create
 weather or run a polling loop. The event producer is responsible for detecting
 weather changes, assigning unique event IDs, and retrying delivery failures.
-The weather service in [`services/weather`](../services/weather/README.md) is
+The weather service in [`services/weather`](weather-service-README.md) is
 that producer for demos. `make up` runs it as the compose `weather` service and
 `scripts/setup.sh` starts it on the host; change weather with
 `make weather CONDITION=rain TEMP=12` (compose) or
@@ -182,7 +182,14 @@ weather, so unconfigured snapshots can conflict with test events.
 | `QSR_AUTONOMY_DISABLED_SKILLS` | empty | Skills to remove at startup |
 | `HERMES_BIN` | `~/.local/bin/hermes` | Hermes executable |
 | `QSR_ADVISOR_TIMEOUT` | `90` | Timeout per reasoning round, seconds |
-| `QSR_ADVISOR_REASONING` | `none` | Hermes reasoning setting |
+| `QSR_ADVISOR_REASONING` | `none` | Reasoning effort of the `qsr-events` profile |
+| `QSR_HERMES_API_PORT` | `8642` | Loopback port of the always-on Hermes gateway |
+| `QSR_HERMES_EVENTS_PROFILE` | `qsr-events` | Hermes profile used for event decisions |
+| `QSR_RUN_HERMES_GATEWAY` | `true` | Start and supervise the gateway from the operator UI |
+| `QSR_MEMORY_NUDGE_INTERVAL` | `10` | Chat user turns between Hermes memory reviews |
+| `QSR_CHAT_IDLE_MINUTES` | `30` | Idle time before chat starts a fresh conversation; `0` never |
+| `QSR_CHAT_PRUNE_TOKENS` | `20000` | Chat context size at which old tool results are dropped |
+| `QSR_CHAT_COMPRESS_TOKENS` | `32000` | Chat context size at which older turns are summarised |
 | `QSR_MCP_PYTHON` | `.venv/mcp/bin/python` | Local MCP interpreter |
 | `QSR_KIOSK_SERVER` | kiosk placeholder path | Local kiosk MCP server |
 | `QSR_ACCURACY_SERVER` | accuracy placeholder path | Local accuracy MCP server |
@@ -191,9 +198,14 @@ weather, so unconfigured snapshots can conflict with test events.
 | `QSR_ESTIMATED_WAIT_MINUTES` | `6` | Placeholder wait override, nonnegative integer minutes |
 | `QSR_WEATHER_MCP_URL` | `http://127.0.0.1:8090/mcp` | Weather MCP service (Streamable HTTP); empty disables weather reads |
 
-Model/provider settings come from the working user Hermes configuration.
-The runner does not apply `QSR_ADVISOR_MODEL`, `QSR_ADVISOR_BASE_URL`, or
-`QSR_ADVISOR_API_KEY` overrides to that configuration.
+Event decisions run on the always-on gateway's `qsr-events` profile (see
+[Hermes runtime](architecture.md#hermes-runtime)), which copies model and
+provider settings from the main Hermes configuration, has no tools, and sees
+Hermes memory read-only. `QSR_ADVISOR_MODEL`, `QSR_ADVISOR_BASE_URL`, and
+`QSR_ADVISOR_API_KEY` only configure the input guardrail classifier.
+
+Learning settings (`QSR_LEARN_THRESHOLD`, `QSR_LEARN_AUTO`, `QSR_LEARNING_DIR`,
+...) are listed in [Operator-taught learning](self-learning.md#learning-from-the-operator-ui).
 
 ## Extending The Catalog
 

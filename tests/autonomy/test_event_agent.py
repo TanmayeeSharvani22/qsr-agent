@@ -15,6 +15,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from autonomy.advisor import HermesRunner
+from autonomy.hermes_gateway import GatewayError
 from autonomy.event_agent import Capability, CapabilityCatalog, HermesEventAgent, Skill, StaleContextError, parse_event_response
 from autonomy.mcp import HttpMcpClient, StdioMcpClient
 from autonomy.registry import AutonomyRegistry
@@ -216,16 +217,19 @@ class EventAgentTests(unittest.TestCase):
             self.assertEqual({item["status"] for item in store.decisions()}, {"no_action"})
             store.close()
 
-    def test_runner_does_not_use_empty_toolset_fallback(self):
-        with patch("autonomy.advisor.subprocess.Popen") as popen:
-            popen.return_value.communicate.return_value = ('{"action":null}', "")
-            popen.return_value.returncode = 0
-            runner = HermesRunner()
-            runner.hermes = "/bin/true"
-            runner.complete("test")
-        command = popen.call_args.args[0]
-        self.assertEqual(command[command.index("--toolsets") + 1], "context_engine")
-        self.assertEqual(popen.call_args.kwargs["env"]["HERMES_IGNORE_RULES"], "1")
+    def test_runner_uses_tool_less_events_profile_and_surfaces_errors(self):
+        self.assertTrue(HermesRunner().gateway.base_url.endswith("/p/qsr-events"))
+
+        class Gateway:
+            def complete(self, prompt):
+                if prompt == "fail":
+                    raise GatewayError("gateway down")
+                return '{"action":null}'
+
+        runner = HermesRunner(gateway=Gateway())
+        self.assertEqual(runner.complete("test"), '{"action":null}')
+        with self.assertRaisesRegex(RuntimeError, "gateway down"):
+            runner.complete("fail")
 
     def setUp(self):
         self.service = FakeService()

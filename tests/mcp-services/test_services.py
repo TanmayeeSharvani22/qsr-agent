@@ -118,6 +118,25 @@ class DomainContractTests(unittest.TestCase):
         self.assertTrue(items["tea"]["available"])
         self.assertEqual(items["tea"]["availability_reason"], "Alternative warm drink")
 
+    def test_kiosk_settings_and_queue_state_persist_in_context(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            state_path = Path(temporary_directory) / "kiosk-state.json"
+            with patch.dict(os.environ, {"QSR_KIOSK_STATE": str(state_path)}):
+                kiosk_server.update_operations({"queue_count": 12, "estimated_wait_minutes": 9})
+                result = kiosk_server.update_kiosk_settings(
+                    reason="Long queue", mode="express", active_kiosks=4, upsell_enabled=False,
+                )
+                operations = kiosk_server.get_kiosk_context()["operations"]
+                for invalid in ({"mode": "turbo"}, {"active_kiosks": 5}, {}):
+                    with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                        kiosk_server.update_kiosk_settings(reason="x", **invalid)
+
+        self.assertEqual(result["changes"], {"kiosk_mode": "express", "active_kiosks": 4, "upsell_enabled": False})
+        self.assertEqual((operations["queue_count"], operations["estimated_wait_minutes"]), (12, 9))
+        self.assertEqual((operations["kiosk_mode"], operations["active_kiosks"]), ("express", 4))
+        self.assertFalse(operations["upsell_enabled"])
+        self.assertEqual(operations["baseline_settings"]["kiosk_mode"], "standard")
+
     def test_order_accuracy_context_has_decision_fields(self) -> None:
         context = order_accuracy_server.get_order_accuracy_context()
 

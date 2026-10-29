@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from .event_agent import Capability, CapabilityCatalog, Skill, StaleContextError
+from .learning import read_skill_meta
 
 
 def validate_menu(arguments: dict[str, Any], observations: dict[str, Any]) -> None:
@@ -36,6 +40,47 @@ def validate_remake(arguments: dict[str, Any], observations: dict[str, Any]) -> 
         raise ValueError("remake action needs a reason")
 
 
+def validate_kiosk_settings(arguments: dict[str, Any], observations: dict[str, Any]) -> None:
+    context = observations["kiosk.get_kiosk_context"]
+    _fresh(context)
+    operations = context.get("operations", {})
+    current = {"mode": operations.get("kiosk_mode"), "active_kiosks": operations.get("active_kiosks"),
+               "upsell_enabled": operations.get("upsell_enabled")}
+    requested = {key: arguments[key] for key in current if key in arguments}
+    if not requested:
+        raise ValueError("kiosk settings action needs mode, active_kiosks or upsell_enabled")
+    unchanged = [key for key, value in requested.items() if current[key] == value]
+    if unchanged:
+        raise ValueError(f"already in the requested state: {', '.join(unchanged)}")
+    if "active_kiosks" in requested and requested["active_kiosks"] > operations.get("max_kiosks", 0):
+        raise ValueError("active_kiosks exceeds max_kiosks")
+    if not arguments["reason"].strip():
+        raise ValueError("kiosk settings action needs a reason")
+
+
+def register_learned_skills(catalog: CapabilityCatalog, directory: Path) -> dict[str, str]:
+    """(Re)register learned-*/SKILL.md skills; return skipped skill names with reasons."""
+    for name, skill in list(catalog.skills.items()):
+        if skill.events:
+            catalog.remove_skill(name)
+    skipped: dict[str, str] = {}
+    for path in sorted(directory.glob("learned-*/SKILL.md")):
+        try:
+            meta = read_skill_meta(path)
+            tools = tuple(meta["tools"])
+            missing = [tool for tool in tools if tool not in catalog.tools]
+            if missing:
+                raise ValueError(f"unregistered tools: {', '.join(missing)}")
+            for tool in tools:
+                if not set(catalog.tools[tool].required_reads) <= set(tools):
+                    raise ValueError(f"{tool} needs its required reads listed")
+            catalog.register_skill(Skill(meta["name"], meta["description"], path, tools, tuple(meta["events"])))
+        except (OSError, ValueError, yaml.YAMLError) as error:
+            skipped[path.parent.name] = str(error)
+            print(f"[autonomy] skipped learned skill {path.parent.name}: {error}", file=sys.stderr)
+    return skipped
+
+
 def _fresh(context: dict[str, Any]) -> None:
     observed = datetime.fromisoformat(context.get("observed_at", "").replace("Z", "+00:00"))
     if observed.tzinfo is None:
@@ -57,6 +102,11 @@ def register_defaults(
     catalog.register_tool(Capability(
         "kiosk.change_menu_items", "Propose up to three menu availability changes; no prices",
         kiosk, "change_menu_items", False, ("kiosk.get_kiosk_context",), validate_menu,
+    ))
+    catalog.register_tool(Capability(
+        "kiosk.update_kiosk_settings",
+        "Propose kiosk operating settings: express/standard mode, active kiosks, upsell prompts",
+        kiosk, "update_kiosk_settings", False, ("kiosk.get_kiosk_context",), validate_kiosk_settings,
     ))
     catalog.register_tool(Capability(
         "accuracy.get_order_accuracy_context", "Read accuracy, flagged orders, mismatches and stations",

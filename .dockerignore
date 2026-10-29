@@ -5,5 +5,9 @@ __pycache__
 models
 results
 tests/mcp-services/logs
+learning/journal
+learning/runs
+learning/skills
+learning/hermes
 operator-ui/frontend/node_modules
 operator-ui/dist

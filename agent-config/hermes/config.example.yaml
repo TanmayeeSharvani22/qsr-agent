@@ -20,7 +20,7 @@ model:
   # tool-driven answers dominate operator latency.
   max_tokens: 1536
   # Stream tokens so the operator UI can render the answer as it is generated
-  # instead of waiting for the whole turn. The UI reads hermes -z line by line.
+  # instead of waiting for the whole turn. The operator UI relays the gateway's stream.
   streaming: true
 
 # Per-endpoint overrides for the custom (OVMS) provider.

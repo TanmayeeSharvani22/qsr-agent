@@ -1,6 +1,6 @@
 # QSR Agent Architecture
 
-[Repository overview](../README.md) | [Documentation guide](index.md) |
+[Repository overview](README.original.md) | [Documentation guide](index.md) |
 [Setup](setup.md) | **Architecture** |
 [Add a service](adding-a-service.md)
 
@@ -34,12 +34,47 @@ User
 gives Qwen the real MCP schemas directly and removes the deferred
 `tool_search -> tool_describe -> tool_call` wrapper sequence.
 
+## Hermes Runtime
+
+The operator UI starts and supervises one always-on `hermes gateway run`
+(API server on `127.0.0.1:8642`, fresh random keys each start) and restarts it
+if it exits. Two Hermes profiles share it:
+
+| Profile | Used for | Tools | Memory |
+|---|---|---|---|
+| default | Operator chat: one persistent conversation (**New chat** starts another) | MCP services, `memory`, `skills` (skill writes need approval) | Read and write |
+| `qsr-events` | Event decisions | None | Read-only, injected into the prompt |
+
+Hermes memory (`MEMORY.md`, `USER.md`) lives in `learning/hermes/memories` on
+the `learning` volume, so operator preferences and context from chat survive
+container recreation and inform event decisions. Hermes reviews chat into
+memory every `QSR_MEMORY_NUDGE_INTERVAL` user turns (default 10). Event rules
+are learnt separately by the [operator-taught learner](self-learning.md) and
+applied in code.
+
+Chat context is budgeted for the 64k-token window, cheapest step first:
+
+1. After `QSR_CHAT_IDLE_MINUTES` (default 30) without a question, the next one
+   starts a fresh conversation; memory carries over, so nothing is summarised.
+2. Past `QSR_CHAT_PRUNE_TOKENS` (default 20000), Hermes drops bulky old tool
+   results without a model call.
+3. Past `QSR_CHAT_COMPRESS_TOKENS` (default 32000), Hermes summarises older
+   turns and keeps the recent ones verbatim. That one turn takes about a minute
+   longer on the local model; a turn adds only about 0.4k tokens, so this is
+   rare.
+
+The application never calls `hermes -z`: once a gateway runs, Hermes hands
+one-shot turns to it with the full toolset, ignoring `--toolsets` and iteration
+limits.
+
 ## Autonomy Event Flow
 
 Event producers POST to the Operator UI `/autonomy/events` webhook. The UI
 queues each event durably, Hermes selects skills and MCP reads, and any proposed
 action waits for operator approval in the right-side Autonomy decisions panel.
-See [Autonomous decisions](autonomy.md).
+See [Autonomous decisions](autonomy.md). Operator responses to events are
+journaled and can be learnt into `learned-<service>` skills; see
+[Operator-taught learning](self-learning.md).
 
 ## Repository Layout
 
@@ -58,7 +93,14 @@ agent-config/hermes/
 qsr-skills/
   kiosk-operations/SKILL.md       Kiosk routing and interpretation
   order-accuracy/SKILL.md         Accuracy routing and interpretation
+autonomy/
+  learning.py                     Learning journal, rule verification, learned-skill format
+  learning_runner.py              Learner runs and Hermes skill approval (UI and CLI)
+learning/
+  simulated/                      Simulated operator history (deterministic)
+  skills/learned-<service>/       Approved learned skills
 scripts/setup.sh                   Local setup and verification
+scripts/learn.py                   Learning CLI (import, status, run, approve)
 docs/
   index.md                         Project entry point
   setup.md                         Complete local installation
@@ -129,10 +171,10 @@ Limitations:
   restarted too, to re-fetch and re-trust the new cert.
 - A server unreachable at this container's startup is skipped silently (logged
   as a warning); use `make restart` (or a full recreate) once it is reachable.
-- Only applies to the long-running process launched via `os.execv` (the
-  operator UI); ad-hoc `docker exec ... hermes -z` commands start a fresh
-  process with the container's static declared environment and do not see
-  this trust bundle.
+- Only applies to processes started by the operator UI (including the Hermes
+  gateway); ad-hoc `docker exec ... hermes` commands outside the gateway run
+  with the container's static declared environment and do not see this trust
+  bundle.
 - TOFU is only reasonable on an internal/trusted network; production
   deployments should use a properly signed certificate instead.
 

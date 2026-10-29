@@ -6,22 +6,18 @@ from pathlib import Path
 from .advisor import HermesRunner
 from .controller import AutonomyController
 from .event_agent import HermesEventAgent
+from .learning import learning_dir
 from .mcp import HttpMcpClient, StdioMcpClient
 from .registry import AutonomyRegistry, load_extensions
 from .store import ProposalStore
-from .service_capabilities import register_defaults
+from .service_capabilities import register_defaults, register_learned_skills
 
 
-def build_controller(root: Path | None = None) -> AutonomyController:
-    project_root = root or Path(__file__).resolve().parent.parent
+def build_registry(project_root: Path) -> AutonomyRegistry:
+    """Catalog of tools and skills, including approved learned skills."""
     python = Path(os.environ.get("QSR_MCP_PYTHON", project_root / ".venv/mcp/bin/python"))
     server = Path(
         os.environ.get("QSR_KIOSK_SERVER", project_root / "tests/mcp-services/kiosk_server.py")
-    )
-    state_path = Path(
-        os.environ.get(
-            "QSR_AUTONOMY_DB", Path.home() / ".local/state/qsr-agent/autonomy.db"
-        )
     )
     registry = AutonomyRegistry()
     registry.catalog.restaurant_id = os.environ.get("QSR_RESTAURANT_ID", "qsr-001")
@@ -44,5 +40,21 @@ def build_controller(root: Path | None = None) -> AutonomyController:
     registry.catalog.remove_tools(*disabled_tools)
     for name in os.environ.get("QSR_AUTONOMY_DISABLED_SKILLS", "").split(","):
         registry.catalog.remove_skill(name.strip())
-    registry.register_event(HermesEventAgent(HermesRunner(), registry.catalog))
+    register_learned_skills(registry.catalog, learning_dir(project_root) / "skills")
+    return registry
+
+
+def build_controller(root: Path | None = None) -> AutonomyController:
+    project_root = root or Path(__file__).resolve().parent.parent
+    state_path = Path(
+        os.environ.get(
+            "QSR_AUTONOMY_DB", Path.home() / ".local/state/qsr-agent/autonomy.db"
+        )
+    )
+    registry = build_registry(project_root)
+    learned = learning_dir(project_root) / "skills"
+    registry.register_event(HermesEventAgent(
+        HermesRunner(), registry.catalog,
+        refresh_skills=lambda: register_learned_skills(registry.catalog, learned),
+    ))
     return registry.build(store=ProposalStore(state_path))

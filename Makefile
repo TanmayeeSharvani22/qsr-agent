@@ -25,7 +25,7 @@ export HOST_UID HOST_GID RENDER_GID
 export WEATHER_PORT
 export TAG
 
-.PHONY: init-env check build build-ready up up-ready down restart logs status download-models download-models-ready weather
+.PHONY: init-env check build build-ready up up-ready down restart logs status download-models download-models-ready weather queue learn
 
 init-env:
 	@cp .env.example .env
@@ -88,3 +88,12 @@ status:
 weather:
 	@test -n "$(CONDITION)" || { echo "Usage: make weather CONDITION=clear|cloudy|fog|drizzle|rain|storm|snow [TEMP=12] [NO_EVENT=1]" >&2; exit 1; }
 	docker compose exec weather weather-simulator set "$(CONDITION)" $(if $(TEMP),--temperature "$(TEMP)") $(if $(NO_EVENT),--no-event)
+
+# Demo queue: make queue COUNT=12 [WAIT=9] (add NO_EVENT=1 to stage silently).
+queue:
+	@test -n "$(COUNT)" || { echo "Usage: make queue COUNT=<customers> [WAIT=<minutes>] [NO_EVENT=1]" >&2; exit 1; }
+	docker compose exec qsr-agent python scripts/queue_event.py --count "$(COUNT)" $(if $(WAIT),--wait "$(WAIT)") $(if $(NO_EVENT),--no-event)
+
+# Operator-taught learning: make learn ARGS="setup|import FILE|status|run|pending|approve ID|reject ID|finalize".
+learn:
+	docker compose exec qsr-agent python scripts/learn.py $(or $(ARGS),status)

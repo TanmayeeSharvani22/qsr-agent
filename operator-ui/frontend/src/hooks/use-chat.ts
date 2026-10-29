@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ask } from "@/api/client";
+import { ask, newChat } from "@/api/client";
 import { WELCOME_MESSAGE } from "@/lib/chat-suggestions";
 
 export type ChatRole = "user" | "assistant";
@@ -50,7 +50,7 @@ export function useChat() {
   }, []);
 
   const send = useCallback(
-    async (rawQuestion: string) => {
+    async (rawQuestion: string, eventId?: string) => {
       const question = rawQuestion.trim();
       if (!question || busy.current) return false;
       busy.current = true;
@@ -63,7 +63,7 @@ export function useChat() {
       nextId.current += 2;
       setStatus("thinking");
       try {
-        const answer = await ask(question);
+        const answer = await ask(question, eventId);
         if (answer.ok) patch(replyId, { text: answer.answer, state: "done" });
         else patch(replyId, { text: `Error: ${answer.error}`, state: "error" });
       } catch (error) {
@@ -77,5 +77,16 @@ export function useChat() {
     [patch],
   );
 
-  return { messages, status, send, addError };
+  /** Start a fresh Hermes conversation and clear the transcript; Hermes memory is kept. */
+  const reset = useCallback(async () => {
+    if (busy.current) return;
+    try {
+      await newChat();
+      if (mounted.current) setMessages([{ id: nextId.current++, role: "assistant", text: WELCOME_MESSAGE, state: "done" }]);
+    } catch (error) {
+      addError(`Could not start a new chat: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }, [addError]);
+
+  return { messages, status, send, addError, reset };
 }

@@ -22,6 +22,8 @@ beforeEach(() => {
       dispatchEvent: () => false,
     }),
   });
+  // jsdom has no prompt(); rejecting asks for an optional reason. Tests override the answer.
+  vi.stubGlobal("prompt", vi.fn(() => ""));
 });
 
 afterEach(() => {

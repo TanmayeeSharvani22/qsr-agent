@@ -95,6 +95,10 @@ export QSR_AUTONOMY_MODULES=service_extensions.capacity_autonomy
 The built-in kiosk and accuracy registrations remain enabled. Duplicate names
 and missing dependencies fail startup instead of replacing another owner.
 
+To let Hermes learn your event responses from operators instead of writing the
+event skill by hand, register the read and action tools only and follow
+[Make a service learnable](self-learning-integration.md).
+
 ## Owner Validation And Skills
 
 Validators reject unsafe or unsupported arguments; they do not select actions.
