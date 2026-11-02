@@ -222,6 +222,21 @@ class SimulatorAndPromptTests(unittest.TestCase):
         self.assertEqual(len(accepted), 1)
         self.assertIn("subsumed", dropped[0])
 
+    def test_multi_setting_rule_is_split_and_each_setting_verified(self):
+        records = _load_simulator().simulate(8, 7, datetime(2026, 9, 1, tzinfo=UTC))
+        tools = [{"name": "kiosk.get_kiosk_context", "read_only": True, "required_reads": []},
+                 {"name": "kiosk.update_kiosk_settings", "read_only": False,
+                  "required_reads": ["kiosk.get_kiosk_context"]}]
+        mode = "context[kiosk.get_kiosk_context].operations.kiosk_mode"
+        accepted, _dropped = verify_rules([
+            {"event": "queue_count_changed",
+             "when": [{"field": "event.queue_count", "op": ">=", "value": 10},
+                      {"field": mode, "op": "==", "value": "standard"}],
+             "propose": {"tool": "kiosk.update_kiosk_settings", "set": {"mode": "express", "upsell_enabled": False}}},
+        ], records, tools)
+        self.assertEqual({key for rule in accepted for key in rule["propose"]["set"]}, {"mode", "upsell_enabled"})
+        self.assertTrue(all(len(rule["propose"]["set"]) == 1 for rule in accepted))
+
 
 class LearnedSkillTests(unittest.TestCase):
     def setUp(self):

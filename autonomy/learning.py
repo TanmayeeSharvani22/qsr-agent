@@ -507,11 +507,25 @@ def parse_rules(reply: str) -> list[dict[str, Any]]:
     return rules
 
 
+def _one_setting_each(rules: list[Any]) -> list[Any]:
+    """Split a rule that proposes several settings into one rule per setting; each is verified on its own."""
+    split: list[Any] = []
+    for rule in rules:
+        propose = rule.get("propose") if isinstance(rule, dict) else None
+        settings = propose.get("set") if isinstance(propose, dict) else None
+        if isinstance(settings, dict) and len(settings) > 1:
+            split += [{**rule, "propose": {**propose, "set": {key: value}}} for key, value in settings.items()]
+        else:
+            split.append(rule)
+    return split
+
+
 def verify_rules(
     rules: list[dict[str, Any]], records: list[dict[str, Any]], tools: list[dict[str, Any]],
     min_support: int = 2, min_precision: float = 0.6,
 ) -> tuple[list[dict[str, Any]], list[str]]:
     """Keep rules the records actually support; counts come from the data, never from the model."""
+    rules = _one_setting_each(rules)
     actions = {tool["name"]: tool for tool in tools if not tool.get("read_only")}
     by_event: dict[str, list[tuple[dict[str, Any], dict[str, Any]]]] = defaultdict(list)
     for record in records:
