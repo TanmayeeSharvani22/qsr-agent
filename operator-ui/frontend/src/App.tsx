@@ -53,7 +53,7 @@ export default function App() {
       </a>
       <AppHeader
         servicesTrigger={
-          <Button variant="outline" size="sm" className="md:hidden" onClick={() => setSheetOpen(true)} aria-label="Open services">
+          <Button variant="outline" size="sm" className="border-white bg-white text-[var(--classic-blue)] hover:bg-white/90 hover:text-[var(--classic-blue)] dark:border-white dark:bg-white dark:hover:bg-white/90 md:hidden" onClick={() => setSheetOpen(true)} aria-label="Open services">
             <PanelLeft aria-hidden /> Services
           </Button>
         }
