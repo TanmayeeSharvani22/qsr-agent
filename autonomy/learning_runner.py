@@ -24,12 +24,14 @@ from typing import Any, Callable
 import yaml
 
 from .learning import (
-    Journal, coverage_gaps, induce_missing_rules, learner_prompt, parse_rules, parse_skill_meta,
+    Journal, coverage_gaps, induce_missing_rules, learner_prompt, learning_dir, parse_rules, parse_skill_meta,
     read_skill_meta, render_skill, skill_sha, validate_learned_skill, verify_rules,
 )
 
 PROFILE = os.environ.get("QSR_LEARNER_PROFILE", "qsr-learner")
 LEARNER_HOME = Path(os.environ.get("QSR_LEARNER_HERMES_HOME", Path.home() / f".hermes/profiles/{PROFILE}"))
+# Staged writes live in the learning volume; the profile itself is recreated with the container.
+PENDING_STORE = learning_dir(Path(__file__).resolve().parents[1]) / "hermes" / "learner-pending"
 HERMES_BIN = os.environ.get("HERMES_BIN", os.path.expanduser("~/.local/bin/hermes"))
 TIMEOUT = float(os.environ.get("QSR_LEARNER_TIMEOUT", "600"))
 
@@ -57,7 +59,22 @@ def hermes_env() -> dict[str, str]:
 
 
 def pending_dir() -> Path:
-    return LEARNER_HOME / "pending" / "skills"
+    return PENDING_STORE / "skills"
+
+
+def link_pending() -> None:
+    """Point the learner profile's `pending/` (read by Hermes's /skills handler) at the persistent store."""
+    link = LEARNER_HOME / "pending"
+    PENDING_STORE.mkdir(parents=True, exist_ok=True)
+    if link.is_symlink():
+        if link.resolve() == PENDING_STORE.resolve():
+            return
+        link.unlink()
+    elif link.is_dir():
+        shutil.copytree(link, PENDING_STORE, dirs_exist_ok=True)
+        shutil.rmtree(link)
+    link.parent.mkdir(parents=True, exist_ok=True)
+    link.symlink_to(PENDING_STORE, target_is_directory=True)
 
 
 def setup_profile(journal: Journal) -> str:
@@ -90,6 +107,7 @@ def setup_profile(journal: Journal) -> str:
     config["mcp_servers"] = {}
     config["memory"] = {**(config.get("memory") or {}), "memory_enabled": False, "user_profile_enabled": False}
     config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    link_pending()
     return f"Learner profile '{PROFILE}' at {LEARNER_HOME}: skills -> {skills_dir}, write_approval on"
 
 
@@ -314,6 +332,9 @@ def decide(journal: Journal, pending_id: str, approve: bool) -> dict[str, Any]:
     """Approve or reject a staged skill write through Hermes, then finalize the run."""
     if not re.fullmatch(r"[0-9a-f]{8}", pending_id) or not (pending_dir() / f"{pending_id}.json").exists():
         raise LearnerError("unknown pending skill write")
+    if not (LEARNER_HOME / "config.yaml").is_file():
+        setup_profile(journal)  # the container was recreated since the run was staged
+    link_pending()
     message = hermes_skills_command("approve" if approve else "reject", pending_id)
     if (pending_dir() / f"{pending_id}.json").exists():
         raise LearnerError(f"Hermes did not apply the decision: {message}")

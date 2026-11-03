@@ -759,13 +759,15 @@ def induce_missing_rules(
             covering = [rule for rule in rules if rule["event"] == event_type and _rule_change(rule) == change]
             hits = sum(change in _changes(record) and any(_matches(rule, fields) for rule in covering)
                        for record, fields in items)
-            if count < min_support or count - hits < min_support:
+            # Beside existing rules, two leftover records are as likely a coincidence as a pattern.
+            needed = max(min_support, 3) if covering else min_support
+            if count < min_support or count - hits < needed:
                 continue
             # Sequential covering: each further rule is fitted to the taught records no rule covers yet.
             for _round in range(3):
                 missed = [(record, fields) for record, fields in items if change in _changes(record)
                           and not any(_matches(rule, fields) for rule in covering)]
-                if len(missed) < min_support:
+                if len(missed) < (max(min_support, 3) if covering else min_support):
                     break
                 pool = missed + [(record, fields) for record, fields in items if change not in _changes(record)]
                 tool, key, value = change

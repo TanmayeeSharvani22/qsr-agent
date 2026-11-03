@@ -43,6 +43,22 @@ Export `http_proxy`, `https_proxy`, and `no_proxy` before building. They are
 passed to the image build as build arguments. See
 [Configuration](configuration.md#proxy).
 
+The agent-runtime installer downloads `uv` from GitHub release assets. Some
+proxy nodes intercept that host with a certificate the build image doesn't
+trust, and the build fails after five attempts with `failed to download pinned
+uv ... (curl 60)`. Point the build at a proxy node that passes GitHub through
+(for a corporate network, ask which one), for example:
+
+```bash
+https_proxy=http://<other-proxy>:<port> http_proxy=$https_proxy make build REGISTRY=false
+```
+
+To rebuild from scratch rather than from cached layers:
+
+```bash
+docker compose build --no-cache --pull qsr-agent weather
+```
+
 ## Deploy a Code Change
 
 The operator UI and agent code are part of the image. After you change them,

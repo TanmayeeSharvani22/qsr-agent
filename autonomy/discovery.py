@@ -22,7 +22,8 @@ from .mcp import HttpMcpClient, StdioMcpClient
 # Built-in services whose catalog prefix differs from the Hermes server name.
 SERVICE_PREFIXES = {"order-accuracy": "accuracy", "order-accuracy-take-away": "accuracy",
                     "order-accuracy-dine-in": "accuracy"}
-READ_PREFIXES = ("get_", "list_", "read_", "search_", "find_", "fetch_", "query_", "describe_", "check_", "lookup_")
+READ_PREFIXES = ("get_", "list_", "read_", "search_", "find_", "fetch_", "query_", "describe_", "check_", "lookup_",
+                 "compare_", "tail_")
 # Contract tools every QSR service exposes; read-only even without a hint.
 READ_NAMES = {"describe"}
 RETRY_SECONDS = 60.0

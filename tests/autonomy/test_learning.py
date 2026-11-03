@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import shutil
 import tempfile
 import unittest
 from datetime import UTC, datetime, timedelta
@@ -412,9 +413,12 @@ class LearningRunnerTests(unittest.TestCase):
         self.journal = Journal(root / "learning")
         self.journal.append(_load_simulator().simulate(8, 7, datetime(2026, 9, 1, tzinfo=UTC)))
         self.patches = [patch.object(learning_runner, "LEARNER_HOME", root / "learner"),
+                        patch.object(learning_runner, "PENDING_STORE", root / "learning/hermes/learner-pending"),
                         patch.object(learning_runner, "complete", return_value=self.REPLY)]
         for active in self.patches:
             active.start()
+        (root / "learner").mkdir()
+        (root / "learner" / "config.yaml").write_text("{}\n")
 
     def tearDown(self):
         for active in self.patches:
@@ -445,6 +449,19 @@ class LearningRunnerTests(unittest.TestCase):
         self.assertEqual(result["runs"][0]["status"], "learnt")
         self.assertEqual(self.journal.records(), [])
         self.assertTrue(self.journal.skill_path("kiosk").is_file())
+
+    def test_staged_write_survives_a_recreated_container(self):
+        run = learning_runner.run_service(self.journal, "kiosk", self.TOOLS, progress=lambda _line: None)
+        shutil.rmtree(learning_runner.LEARNER_HOME, ignore_errors=True)  # the profile lives in the container
+        self.assertEqual([item["id"] for item in learning_runner.pending_writes()], run["pending_ids"])
+        with patch.object(learning_runner, "hermes_skills_command", side_effect=self._approve_like_hermes), \
+                patch.object(learning_runner, "setup_profile",
+                             side_effect=lambda _journal: (learning_runner.LEARNER_HOME / "config.yaml").parent
+                             .mkdir(parents=True, exist_ok=True)) as setup:
+            result = learning_runner.decide(self.journal, run["pending_ids"][0], approve=True)
+        setup.assert_called_once()
+        self.assertEqual(result["runs"][0]["status"], "learnt")
+        self.assertTrue((learning_runner.LEARNER_HOME / "pending").is_symlink())
 
     def test_reject_keeps_records_and_unknown_ids_fail(self):
         run = learning_runner.run_service(self.journal, "kiosk", self.TOOLS, progress=lambda _line: None)

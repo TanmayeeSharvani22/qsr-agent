@@ -97,8 +97,8 @@ class DiscoveryTests(unittest.TestCase):
         calls = [{"tool": "mcp__kiosk__get_kiosk_context", "arguments": {}},
                  {"tool": "mcp__kiosk__update_kiosk_settings", "arguments": {"mode": "express"}},
                  {"tool": "mcp__order_accuracy__request_remake", "arguments": {"order_id": "A-1"}},
-                 {"tool": "mcp__edgemart_table_sim_service__mark_table_cleared", "arguments": {"table_id": "T4"}},
-                 {"tool": "mcp__edgemart_table_sim_service__occupancy", "arguments": {}},
+                 {"tool": "mcp__table_occupancy_service__mark_table_cleared", "arguments": {"table_id": "T4"}},
+                 {"tool": "mcp__table_occupancy_service__occupancy", "arguments": {}},
                  {"tool": "mcp__Digital_Signage__show_promo", "arguments": {"promo": "soup"}},
                  {"tool": "memory", "arguments": {"action": "add"}}]
         self.assertEqual(discovery.chat_action_calls(calls, catalog, servers), [
@@ -110,6 +110,8 @@ class DiscoveryTests(unittest.TestCase):
         self.assertFalse(discovery.is_connected_action("digital-signage.get_promos", catalog, servers))
         self.assertFalse(discovery.is_connected_action("table-occupancy-service.occupancy", catalog, servers))
         self.assertFalse(discovery.is_connected_action("shell.run", catalog, servers))
+        for read in ("compare_to_baseline", "tail_events", "describe"):
+            self.assertTrue(discovery.is_read({"name": read}), read)
 
     def test_discovered_service_is_learnable_without_service_code(self):
         catalog, _ = _catalog_with(FakeService(TABLE_TOOLS))

@@ -148,6 +148,11 @@ class ServiceHistoryTests(unittest.TestCase):
         self.assertIn([{"field": "event.venue", "op": "==", "value": "dine-in"}], [rule["when"] for rule in accepted])
         self.assertEqual(sorted((rule["support"], rule["matched"], rule["rejected"]) for rule in accepted),
                          [(3, 3, 0), (6, 6, 0)])
+        # Two leftover records beside an existing rule are not enough for another rule.
+        two_extra = [record for record in records if record["event"]["payload"]["order_id"] != "O-8"]
+        accepted, _dropped = verify_rules(induce_missing_rules([], two_extra), two_extra, TOOLS)
+        self.assertEqual([rule["when"] for rule in accepted],
+                         [[{"field": "event.venue", "op": "==", "value": "dine-in"}]])
 
     def test_weather_envelope_service_and_malformed_or_sparse_records(self):
         self.assertEqual(event_service({"event_type": "weather_changed", "service": "weather", "data": {}}), "weather")

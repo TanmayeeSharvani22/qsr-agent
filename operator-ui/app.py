@@ -142,6 +142,12 @@ def linked_decision(event_id: object) -> dict | None:
     return AUTONOMY.store.decision(event_id)
 
 
+def chat_prompt(question: str) -> str:
+    # Without this the model picks remote tools by name alone (e.g. set_board_mode for "back to normal").
+    return ("Load the relevant store domain skill and read live context before you answer or act; "
+            "use the action tool that skill names.\nOperator: " + question)
+
+
 def event_prompt(question: str, decision: dict) -> str:
     event = decision["event"]
     observed = {"event_type": event.get("event_type"), "service": event.get("service"),
@@ -688,7 +694,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send(413, b'{"ok":false,"error":"question too long"}', "application/json")
             return
         decision = linked_decision(payload.get("event_id"))
-        prompt = event_prompt(question, decision) if decision else question
+        prompt = event_prompt(question, decision) if decision else chat_prompt(question)
         if not in_scope(question, decision):
             if self.path == "/ask/stream":
                 self._stream_text(DECLINE_MESSAGE)

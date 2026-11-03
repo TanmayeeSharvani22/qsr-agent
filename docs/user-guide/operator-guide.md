@@ -94,6 +94,9 @@ make learn ARGS=pending
 make learn ARGS="approve <id>"
 ```
 
+Learned rules waiting for review are kept in the `learning` volume, so they
+survive `make restart`, `make up` and image rebuilds.
+
 ### Try learning with sample data
 
 To see learning work before you have collected real responses, import the

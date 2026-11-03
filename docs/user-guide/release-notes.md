@@ -39,6 +39,20 @@
 - The kiosk skill uses the real kiosk tools (`change_menu_items`,
   `update_menu_item`, queue history, order stats, board state, menu requests)
   and fields.
+- Learned rules waiting for review survive container restarts and rebuilds;
+  approving after `make restart` no longer fails with "unknown pending skill
+  write".
+- `make learn` trusts the self-signed certificates of remote services, so
+  learning can read services such as digital signage.
+- Learning no longer adds a rule from only two records that the other rules
+  miss.
+- Operator chat loads the store skill before answering, so "back to normal"
+  restores the kiosk settings instead of changing the board mode.
+- Order accuracy answers for "last N minutes" list only orders inside that
+  window.
+- Table answers report dirty episodes as episodes, not tables; busy-hour
+  answers no longer pass invalid dates to the footfall service.
+- `compare_*` and `tail_*` service tools are classified as reads.
 
 ### Known Limitations
 

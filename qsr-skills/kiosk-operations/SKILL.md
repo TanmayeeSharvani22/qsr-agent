@@ -22,7 +22,7 @@ a fresh context call is available.
 | Current wait time | `get_kiosk_context` | `operations.estimated_wait_minutes`, `observed_at` | Say that the value is an estimate and include minutes. |
 | Current weather | `get_weather_details` (weather MCP service) | `condition`, `is_raining`, `temperature_c`, `source`, `simulated`, `observed_at` | Kiosk context has no weather. Include the source and say when `simulated` is true. |
 | Store status or kiosks | `get_kiosk_context` | `operations.status`, `operations.active_kiosks`, `operations.max_kiosks` | Return only requested values. The kiosk does not report staffing; say so if asked. |
-| Kiosk mode, open kiosks, upsell prompts | `get_kiosk_context` | `operations.kiosk_mode`, `active_kiosks`, `max_kiosks`, `upsell_enabled`, `baseline_settings` | "Normal" settings means `baseline_settings`. |
+| Kiosk mode, open kiosks, upsell prompts | `get_kiosk_context` | `operations.kiosk_mode`, `active_kiosks`, `max_kiosks`, `upsell_enabled`, `baseline_settings` | `kiosk_mode` is `standard` or `express`; it is not the menu-board mode (`full`/`simplified`). "Normal" settings means `baseline_settings`. |
 | Menu price or availability | `get_kiosk_context` | matching entry in `menu.items` (`id`, `name`, `category`, `price`, `available`) | Match by `id` (for example `DRINK-004`) when available; otherwise match the displayed name and state ambiguity. |
 | Recent demand | `get_kiosk_context` | `recent_activity.orders_last_15_minutes`, `top_item` | Preserve the service's time window. |
 | Queue trend ("is it always busy now?") | `get_queue_history` (`period`: `today`, `yesterday`, `all`, `YYYY-MM-DD`) | `samples`, `avg_count`, `max_count` | Name the period and sample count. |
@@ -74,7 +74,9 @@ An operator message that directly instructs a settings change (for example
 1. Call `get_kiosk_context` for current settings, `max_kiosks`, and `baseline_settings`.
 2. Call `update_kiosk_settings` once with only the fields that differ from the
    requested state and the operator's reason. "Open kiosk N" means
-   `active_kiosks: N`; "back to normal" means `baseline_settings`.
+   `active_kiosks: N`; "back to normal" means `baseline_settings` (mode,
+   active kiosks and upsell together). Do not use `set_board_mode` for these
+   requests: `update_kiosk_settings` also sets the menu board.
 3. Report the applied changes from the result's `settings`.
 
 Questions or recommendations about settings never authorize a change.

@@ -20,6 +20,49 @@ journal all work against the real service code.
 Every action the agent proposes runs only after an operator approves it. Each service
 also validates the action itself.
 
+## Fresh Run on Latest Main (`261fc0b`)
+
+New clone of `intel-retail/qsr-agent` `main`, with no existing images, volumes or
+models: `make download-models` (16 GB), `docker compose build --no-cache`,
+`make up REGISTRY=false`. All remote services ran on their own hosts; only weather
+ran next to the agent.
+
+| Service | Endpoint | Tools | Result |
+|---|---|---|---|
+| Kiosk | `10.223.23.74:8014` | 13 | Q&A and settings actions pass |
+| Order Accuracy take-away / dine-in | `10.223.23.34:8010` / `:8011` | 6 / 6 | Q&A pass; host went offline mid-run, MCP did not answer after it returned |
+| Digital signage | `https://10.49.88.101:5000` (self-signed) | 7 | Q&A pass |
+| Suspicious activity | `10.223.22.84:9000` | 9 | Q&A pass |
+| Store activity / table occupancy / footfall | `10.49.88.101:3101` / `:3201` / `:3301` | 8 / 7 / 4 | Q&A pass after skill fixes |
+| Weather (local) | compose `weather` | 2 | Q&A and events pass |
+
+Results:
+
+- **Unit tests:** agent, operator UI and weather (18) pass after fixing a stale test.
+- **Weather events:** rain → `DRINK-004`/`DRINK-005` turned off on the remote kiosk
+  (approved, executed); clear → turned back on; 32 °C → no action.
+- **Sample-data learning** (operator guide): kiosk 7 rules, weather 3, accuracy 1.
+  Approved after a container recreate; the learned skills are installed.
+
+Issues found and fixed:
+
+| Issue | Fix |
+|---|---|
+| No-cache build failed: proxy node intercepted the `uv` download (curl 60) | Documented in Build from Source and Troubleshooting |
+| `test_discovery` used the pre-rename EdgeMart server names | Test updated; `compare_*`/`tail_*` tools classified as reads |
+| Chat "back to normal" called `set_board_mode` and mixed board mode with kiosk mode | Chat loads the domain skill first; kiosk skill restores `baseline_settings` with `update_kiosk_settings` |
+| "Flagged in the last 30 minutes" listed weeks-old orders | Order accuracy skill filters by `observed_at` |
+| Learning fitted rules from two coincidental records | At least three records needed for an extra rule |
+| `make learn` could not read signage (self-signed certificate) | Learn CLI uses the agent's remote CA bundle |
+| Approving a staged rule after `make restart` failed ("unknown pending skill write") | Staged writes kept in the `learning` volume |
+| Dirty-table count reported as tables; busy-hours passed invalid dates | Table and footfall skills corrected |
+| A large table answer exhausted the model context and chat hung | `make restart` recovers; documented in Troubleshooting |
+
+Not covered in this run: live kiosk queue events and live order-accuracy events with
+learning from real records, because the Order Accuracy MCP services stopped
+answering, and the kiosk queue source was fixed at one value. The earlier
+[Remote-Host Run](#remote-host-run-2026-11-03) covers both.
+
 ## Remote-Host Run (2026-11-03)
 
 Fresh clone of `main` (`2212338`), started per the README with
