@@ -1,6 +1,6 @@
 ---
 name: table-management
-description: "Answer table occupancy, utilization, and dirty-table questions, and safely mark tables occupied/cleared, using the EdgeMart table-sim-service MCP service."
+description: "Answer table occupancy, utilization, and dirty-table questions, and safely mark tables occupied/cleared, using the EdgeMart table-occupancy-service MCP service."
 version: 1.0.0
 platforms: [linux]
 metadata:
@@ -10,7 +10,7 @@ metadata:
 
 # Table Management
 
-Use the `edgemart-table-sim-service` MCP service as the source of table
+Use the `table-occupancy-service` MCP service as the source of table
 occupancy/cleaning facts. It tracks only the table lifecycle (occupied, dirty,
 cleared) — it has no customer or order context; use the `cafe-operations`
 skill for those.

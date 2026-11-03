@@ -41,7 +41,7 @@ class FakeService:
         return {"tables": [{"id": "T4", "state": "dirty"}]} if name == "get_tables" else {"ok": True}
 
 
-def _catalog_with(service: FakeService, server: str = "edgemart-table-sim-service", **kwargs):
+def _catalog_with(service: FakeService, server: str = "table-occupancy-service", **kwargs):
     catalog = CapabilityCatalog()
     with patch.object(discovery, "_client", return_value=service):
         errors = discovery.discover(catalog, {server: {"url": "http://table/mcp"}}, **kwargs)
@@ -54,7 +54,7 @@ class DiscoveryTests(unittest.TestCase):
         catalog, errors = _catalog_with(service)
         self.assertEqual(errors, {})
         tools = {name: (tool.read_only, tool.required_reads) for name, tool in catalog.tools.items()}
-        prefix = "edgemart-table-sim-service."
+        prefix = "table-occupancy-service."
         self.assertEqual(tools, {
             prefix + "get_tables": (True, ()), prefix + "get_table": (True, ()), prefix + "occupancy": (True, ()),
             # Actions require the service's argument-free context reads.
@@ -69,8 +69,8 @@ class DiscoveryTests(unittest.TestCase):
         self.assertEqual(action.client.call_tool(action.tool, {"table_id": "T4"}), {"executed": True, "ok": True})
 
     def test_known_disabled_unreachable_and_read_less_servers(self):
-        catalog, _ = _catalog_with(FakeService(TABLE_TOOLS), disabled=["edgemart-table-sim-service.seat_party"])
-        self.assertNotIn("edgemart-table-sim-service.seat_party", catalog.tools)
+        catalog, _ = _catalog_with(FakeService(TABLE_TOOLS), disabled=["table-occupancy-service.seat_party"])
+        self.assertNotIn("table-occupancy-service.seat_party", catalog.tools)
         # Without a context read the actions are not proposable (chat calls are still journaled).
         catalog, _ = _catalog_with(FakeService([TABLE_TOOLS[2]]), server="signage")
         self.assertEqual(catalog.tools, {})
@@ -81,17 +81,17 @@ class DiscoveryTests(unittest.TestCase):
         # An unreachable service is retried after the back-off.
         offline = FakeService(TABLE_TOOLS, fail=True)
         catalog, errors = _catalog_with(offline)
-        self.assertIn("connection refused", errors["edgemart-table-sim-service"])
+        self.assertIn("connection refused", errors["table-occupancy-service"])
         with patch.object(discovery, "_client", return_value=FakeService(TABLE_TOOLS)):
-            discovery.discover(catalog, {"edgemart-table-sim-service": {"url": "http://table/mcp"}})
+            discovery.discover(catalog, {"table-occupancy-service": {"url": "http://table/mcp"}})
             self.assertEqual(catalog.tools, {})
             with patch.object(discovery, "RETRY_SECONDS", 0):
-                discovery.discover(catalog, {"edgemart-table-sim-service": {"url": "http://table/mcp"}})
-        self.assertIn("edgemart-table-sim-service.mark_table_cleared", catalog.tools)
+                discovery.discover(catalog, {"table-occupancy-service": {"url": "http://table/mcp"}})
+        self.assertIn("table-occupancy-service.mark_table_cleared", catalog.tools)
 
     def test_chat_calls_from_any_connected_server_are_journaled_by_service(self):
         catalog, _ = _catalog_with(FakeService(TABLE_TOOLS))
-        servers = {"edgemart-table-sim-service": {}, "kiosk": {}, "order-accuracy": {}, "Digital_Signage": {}}
+        servers = {"table-occupancy-service": {}, "kiosk": {}, "order-accuracy": {}, "Digital_Signage": {}}
         calls = [{"tool": "mcp__kiosk__get_kiosk_context", "arguments": {}},
                  {"tool": "mcp__kiosk__update_kiosk_settings", "arguments": {"mode": "express"}},
                  {"tool": "mcp__order_accuracy__request_remake", "arguments": {"order_id": "A-1"}},
@@ -102,11 +102,11 @@ class DiscoveryTests(unittest.TestCase):
         self.assertEqual(discovery.chat_action_calls(calls, catalog, servers), [
             {"tool": "kiosk.update_kiosk_settings", "arguments": {"mode": "express"}},
             {"tool": "accuracy.request_remake", "arguments": {"order_id": "A-1"}},
-            {"tool": "edgemart-table-sim-service.mark_table_cleared", "arguments": {"table_id": "T4"}},
+            {"tool": "table-occupancy-service.mark_table_cleared", "arguments": {"table_id": "T4"}},
             {"tool": "digital-signage.show_promo", "arguments": {"promo": "soup"}}])
         self.assertTrue(discovery.is_connected_action("digital-signage.show_promo", catalog, servers))
         self.assertFalse(discovery.is_connected_action("digital-signage.get_promos", catalog, servers))
-        self.assertFalse(discovery.is_connected_action("edgemart-table-sim-service.occupancy", catalog, servers))
+        self.assertFalse(discovery.is_connected_action("table-occupancy-service.occupancy", catalog, servers))
         self.assertFalse(discovery.is_connected_action("shell.run", catalog, servers))
 
     def test_discovered_service_is_learnable_without_service_code(self):
@@ -115,23 +115,23 @@ class DiscoveryTests(unittest.TestCase):
         records = []
         for index in range(8):
             table, minutes = f"table-{index}", 5 + index * 3  # 5..26 minutes dirty; cleared from 14 up
-            event = {"event_id": f"t-{index}", "service": "edgemart-table-sim-service", "event_type": "table_dirty",
+            event = {"event_id": f"t-{index}", "service": "table-occupancy-service", "event_type": "table_dirty",
                      "occurred_at": f"2026-11-02T10:{index:02d}:00+00:00",
                      "data": {"table_id": table, "minutes_dirty": minutes}}
-            calls = ([{"tool": "edgemart-table-sim-service.mark_table_cleared", "arguments": {"table_id": table}}]
+            calls = ([{"tool": "table-occupancy-service.mark_table_cleared", "arguments": {"table_id": table}}]
                      if minutes >= 14 else [])
             records.append(service_record(event, "instruction" if calls else "none", "", calls, None, f"t-{index}"))
         accepted, dropped = verify_rules(induce_missing_rules([], records), records, tools)
         self.assertEqual(len(accepted), 1, dropped)
         self.assertEqual(matching_settings(accepted, {"event.table_id": "table-9", "event.minutes_dirty": 30}),
-                         {"edgemart-table-sim-service.mark_table_cleared": {"table_id": "table-9"}})
+                         {"table-occupancy-service.mark_table_cleared": {"table_id": "table-9"}})
         with tempfile.TemporaryDirectory() as directory:
-            skill = Path(directory) / "learned-edgemart-table-sim-service/SKILL.md"
+            skill = Path(directory) / "learned-table-occupancy-service/SKILL.md"
             skill.parent.mkdir()
-            skill.write_text(render_skill("edgemart-table-sim-service", accepted, tools), encoding="utf-8")
+            skill.write_text(render_skill("table-occupancy-service", accepted, tools), encoding="utf-8")
             self.assertEqual(register_learned_skills(catalog, Path(directory)), {})
-        self.assertIn("edgemart-table-sim-service.get_tables",
-                      catalog.skills["learned-edgemart-table-sim-service"].tools)
+        self.assertIn("table-occupancy-service.get_tables",
+                      catalog.skills["learned-table-occupancy-service"].tools)
 
     def test_hermes_config_and_text_only_results(self):
         with tempfile.TemporaryDirectory() as directory:

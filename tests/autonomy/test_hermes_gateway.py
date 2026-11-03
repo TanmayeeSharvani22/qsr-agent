@@ -179,7 +179,7 @@ class HermesGatewayTests(unittest.TestCase):
     def test_services_log_operator_responses_into_the_journal(self):
         config = self.home / "hermes.yaml"
         # A connected service the agent has no code for (unreachable here, so only its name is known).
-        config.write_text("mcp_servers:\n  edgemart-table-sim-service:\n    url: http://127.0.0.1:9/mcp\n",
+        config.write_text("mcp_servers:\n  table-occupancy-service:\n    url: http://127.0.0.1:9/mcp\n",
                           encoding="utf-8")
         environ = {"QSR_AUTONOMY_DB": str(self.home / "state.db"), "QSR_AUTONOMY_MODULES": "",
                    "QSR_WARMUP": "false", "QSR_LEARNING_DIR": str(self.home / "learning"),
@@ -191,9 +191,9 @@ class HermesGatewayTests(unittest.TestCase):
             event = {"event_id": "oa-1", "event_type": "order_mismatch", "occurred_at": "2026-11-02T10:00:00+00:00",
                      "data": {"order_id": "A-77", "confidence": 0.95}}
             remake = {"tool": "accuracy.request_remake", "arguments": {"order_id": "A-77", "reason": "missing fries"}}
-            table = {"event_id": "t-1", "service": "edgemart-table-sim-service", "event_type": "table_dirty",
+            table = {"event_id": "t-1", "service": "table-occupancy-service", "event_type": "table_dirty",
                      "occurred_at": "2026-11-02T10:05:00+00:00", "data": {"table_id": "T4"}}
-            cleared = {"tool": "edgemart-table-sim-service.mark_table_cleared", "arguments": {"table_id": "T4"}}
+            cleared = {"tool": "table-occupancy-service.mark_table_cleared", "arguments": {"table_id": "T4"}}
             try:
                 status, body = app.record_service_response(
                     {"event": event, "kind": "instruction", "tool_calls": [remake], "response_id": "oa-1-remake"})
@@ -209,10 +209,10 @@ class HermesGatewayTests(unittest.TestCase):
                 self.assertEqual(app.record_service_response(
                     {"event": table, "tool_calls": [cleared], "response_id": "t-1"})[0], 201)
                 self.assertEqual(app.record_service_response({"event": table, "tool_calls": [
-                    {"tool": "edgemart-table-sim-service.get_tables", "arguments": {}}]})[0], 400)
+                    {"tool": "table-occupancy-service.get_tables", "arguments": {}}]})[0], 400)
                 records = app.LEARNING.records()
                 self.assertEqual([(r["event"]["service"], r["link"], r["operator"]["tool_calls"]) for r in records],
-                                 [("accuracy", "service", [remake]), ("edgemart-table-sim-service", "service", [cleared])])
+                                 [("accuracy", "service", [remake]), ("table-occupancy-service", "service", [cleared])])
             finally:
                 app.AUTONOMY.store.close()
 

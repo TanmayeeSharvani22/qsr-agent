@@ -59,7 +59,7 @@ not exercised in a test here.
 
 | Question or event | Status | Observed result |
 |---|---|---|
-| Plug-and-play: a new MCP service (table sim) with no agent code. "Mark table-4 as cleared." | Live | "Table-4 has been marked as cleared." Journaled as `edgemart-table-sim-service.mark_table_cleared {table_id: table-4}` |
+| Plug-and-play: a new MCP service (table sim) with no agent code. "Mark table-4 as cleared." | Live | "Table-4 has been marked as cleared." Journaled as `table-occupancy-service.mark_table_cleared {table_id: table-4}` |
 | A service reports an operator response itself (`POST /learning/responses`) | Live, Unit | 201 recorded; same `response_id` again adds nothing; a read tool or unknown tool returns 400 |
 | Weather (`weather_changed`) and learning across kiosk, weather, accuracy | Live (learner), Unit | Learner on Qwen3-30B: kiosk 7 rules in 61 s, weather 3 rules in 40 s, accuracy 1 rule in 26 s (remake with the order id taken from the event) |
 | Chat actions journaled from Hermes's own tool calls (no server logs needed) | Live, Unit | Recorded with the MCP server logs deleted |
@@ -77,7 +77,7 @@ the records, and an operator approves the resulting skill.
 |---|---|---|---|---|
 | Chat while the event is shown | `queue_count_changed` (queue 12, wait 9) | "Switch kiosks to express, open kiosk 4 and turn upsell off." | `instruction`, `kiosk.update_kiosk_settings` with the arguments Hermes used; captured from Hermes's stream with the MCP server logs deleted | Live |
 | Chat while the event is shown | `order_mismatch_detected` (take-away, remote) | "Remake order LIVE-11758, the fries were missing." | `instruction`, `accuracy.request_remake {order_id: LIVE-11758, ...}` | Live |
-| Chat while the event is shown | `table_dirty` (table sim, no agent code) | "Mark table-4 as cleared." | `instruction`, `edgemart-table-sim-service.mark_table_cleared {table_id: table-4}` | Live |
+| Chat while the event is shown | `table_dirty` (table sim, no agent code) | "Mark table-4 as cleared." | `instruction`, `table-occupancy-service.mark_table_cleared {table_id: table-4}` | Live |
 | Approve in the console | `queue_count_changed` (queue 14, remote kiosk) | Approved the `update_kiosk_settings` proposal | `approved`, with the proposal and its execution status | Live |
 | Silence | `queue_count_changed` | No response within the link window | `none` | Live |
 | Service reports it (`POST /learning/responses`) | `order_mismatch` (order A-77), `table_dirty` (table-4) | Remake / table cleared on the service's own screen | `service` link, 201; same `response_id` again adds nothing; a read or unknown tool returns 400 | Live, Unit |

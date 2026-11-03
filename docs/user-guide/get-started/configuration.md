@@ -91,9 +91,9 @@ The preconfigured entries read their URLs from `.env.example`. Leave
 | `order-accuracy-dine-in` | Dine-in order accuracy (replaces the local simulation) | `QSR_ORDER_ACCURACY_DINE_IN_MCP_URL` |
 | `kiosk` | Queue, menu, and staffing (replaces the local simulation) | `QSR_KIOSK_MCP_URL` |
 | `digital-signage` | In-store advertising | `QSR_DIGITAL_SIGNAGE_MCP_URL` |
-| `edgemart-sim-service` | Café-day orders, customers, and queue | `EDGEMART_SIM_MCP_URL` |
-| `edgemart-table-sim-service` | Table occupancy and cleaning | `EDGEMART_TABLE_SIM_MCP_URL` |
-| `edgemart-footfall-sim-service` | Zone footfall and busy hours | `EDGEMART_FOOTFALL_SIM_MCP_URL` |
+| `store-activity-service` | Café-day orders, customers, and queue | `EDGEMART_SIM_MCP_URL` |
+| `table-occupancy-service` | Table occupancy and cleaning | `EDGEMART_TABLE_SIM_MCP_URL` |
+| `footfall-service` | Zone footfall and busy hours | `EDGEMART_FOOTFALL_SIM_MCP_URL` |
 
 Services that are not running appear as unavailable in **Connected apps**. The
 agent keeps working with the services it can reach.

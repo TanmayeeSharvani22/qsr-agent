@@ -1,6 +1,6 @@
 ---
 name: footfall-analytics
-description: "Answer zone-level footfall, traffic, and busy-hour questions using the EdgeMart footfall-sim-service MCP service. Read-only — no actions."
+description: "Answer zone-level footfall, traffic, and busy-hour questions using the EdgeMart footfall-service MCP service. Read-only — no actions."
 version: 1.0.0
 platforms: [linux]
 metadata:
@@ -10,7 +10,7 @@ metadata:
 
 # Footfall Analytics
 
-Use the `edgemart-footfall-sim-service` MCP service for zone-level people-count
+Use the `footfall-service` MCP service for zone-level people-count
 and density questions (entrance, counter, seating). This service is read-only
 — it has no action tools, and no menu/table/order context; use
 `cafe-operations` or `table-management` for those.
