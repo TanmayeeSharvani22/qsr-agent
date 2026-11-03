@@ -166,9 +166,8 @@ above).
 | W3 | rain / storm | "double-check bags at drive-thru" | double-check on before errors rise | `accuracy.set_station_check` |
 | W4 | clear again | "back to normal" | default featured items, double-check off | both |
 
-To do for weather: add `"service": "weather"` to the event envelope in
-`services/weather/weather_simulator/events.py` (it is missing today), and
-include current featured items / station check mode in the kiosk and accuracy
+The weather envelope now carries `"service": "weather"`
+(`services/weather/weather_simulator/events.py`). Still to do: include current featured items / station check mode in the kiosk and accuracy
 context tools.
 
 ### Order accuracy: mismatch events
@@ -193,6 +192,7 @@ Host install (`PY=.venv/mcp/bin/python`). Compose: prefix with
 |---|---|---|
 | Once per machine (optional) | `$PY scripts/learn.py setup` | Creates the `qsr-learner` Hermes profile with write approval on; **Learn now** does this on first use. Re-run after changing the model in `~/.hermes/config.yaml` |
 | After adding the service | restart the operator UI | Catalog and MCP tools load at startup; learned skills reload on every event |
+| Common stimulation file | `$PY scripts/simulate_service_history.py` then `QSR_LEARNING_DIR=<test dir> $PY scripts/learn.py import learning/simulated/event_op_response.jsonl` | Kiosk + weather + accuracy in one file; test journals only |
 | Bootstrap (once per service) | `$PY scripts/simulate_<service>_history.py` then `$PY scripts/learn.py import learning/simulated/<file>.jsonl` | Commit the generated file; it is deterministic |
 | Check readiness | `$PY scripts/learn.py status` | An event type is `ready` at `--min-records` (default 5) |
 | Learn | Operator UI **Learn now** (shown at `QSR_LEARN_THRESHOLD`, default 20), or `$PY scripts/learn.py run [--service kiosk] [--min-support 2]` | ~1 min on Qwen3-30B-A3B; `--dry-run` prints the prompt only; `QSR_LEARN_AUTO=true` starts it automatically |

@@ -24,10 +24,8 @@ format — registered as distinct MCP servers:
 
 Before the first order-accuracy tool call in a conversation for a given
 service, call `describe`. Use the returned contract to identify the current
-read tools, input schemas, and event types for that service — Order Accuracy
-is sensor-only, so `describe` should report no action tools; if it ever does,
-treat that as a live signal and re-derive routing from it rather than from
-this file. Do not use `describe` as evidence for live accuracy facts.
+read tools, action tools, input schemas, and event types for that service.
+Do not use `describe` as evidence for live accuracy facts.
 
 Map each request to the required capability below, then choose the compatible
 tool from `describe`. If no compatible tool is available, explain that the
@@ -39,9 +37,19 @@ Always call the service that matches the venue format implied by the question
 both services are registered, ask which one, or call both and label each
 result by service.
 
-If a question implies taking an action (remake, comp, alert dismissal), check
-`describe` first; if no compatible action tool is available, explain that
-Order Accuracy can only report data and does not support that action.
+## Remakes
+
+Each service can remake only its own flagged orders with `request_remake`
+(`order_id`, `reason`). Route it to the service that owns the order:
+
+* An event's `data.venue` names it: `take-away` → `order-accuracy-take-away`,
+  `dine-in` → `order-accuracy-dine-in`.
+* Otherwise call `get_order_accuracy_context` on each service and use the one
+  whose `recent_orders` lists the order with `result: flagged`.
+
+If a service answers that the order is not one of its flagged orders, try the
+other service before reporting failure. Comps and alert dismissal are not
+supported; say so.
 
 ## Capability Routing
 

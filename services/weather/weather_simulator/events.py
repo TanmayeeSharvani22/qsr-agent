@@ -60,6 +60,7 @@ class WeatherEventPublisher:
         return {
             "event_id": f"weather-{self.store_id}-{stamp}-{uuid4().hex[:8]}",
             "event_type": EVENT_TYPE,
+            "service": "weather",
             "store_id": self.store_id,
             "occurred_at": current["observed_at"],
             "data": {

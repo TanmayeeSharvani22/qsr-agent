@@ -10,6 +10,55 @@ import yaml
 from .event_agent import Capability, CapabilityCatalog, Skill, StaleContextError
 from .learning import read_skill_meta
 
+ACCURACY_CONTEXT = "get_order_accuracy_context"
+
+
+class MergedAccuracyClient:
+    """Take-away and dine-in Order Accuracy services as one `accuracy` service.
+
+    Contexts are merged (an unreachable service is skipped while another answers) and a
+    remake goes to the service that reported the order as flagged.
+    """
+
+    def __init__(self, clients: list[Any]) -> None:
+        self.clients = clients
+
+    def list_tools(self) -> list[dict[str, Any]]:
+        return self.clients[0].list_tools()
+
+    def _contexts(self) -> list[tuple[Any, dict[str, Any]]]:
+        answered, error = [], None
+        for client in self.clients:
+            try:
+                answered.append((client, client.call_tool(ACCURACY_CONTEXT)))
+            except (RuntimeError, OSError, ValueError) as failure:
+                error = failure
+        if not answered:
+            raise error or RuntimeError("no order-accuracy service answered")
+        return answered
+
+    def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
+        if name == ACCURACY_CONTEXT:
+            contexts = [context for _client, context in self._contexts()]
+            merged = dict(contexts[0])
+            for key in ("stations", "recent_orders", "alerts"):
+                merged[key] = [entry for context in contexts for entry in context.get(key) or []]
+            totals = {key: sum((context.get("summary") or {}).get(key) or 0 for context in contexts)
+                      for key in ("orders_observed", "orders_accurate", "orders_flagged")}
+            observed = totals["orders_observed"]
+            merged["summary"] = {**(merged.get("summary") or {}), **totals,
+                                 "accuracy_rate": round(totals["orders_accurate"] / observed, 3) if observed else None}
+            merged["observed_at"] = min(context["observed_at"] for context in contexts)
+            return merged
+        order_id = (arguments or {}).get("order_id")
+        if order_id is not None:
+            for client, context in self._contexts():
+                if any(order.get("order_id") == order_id and order.get("result") == "flagged"
+                       for order in context.get("recent_orders") or []):
+                    return client.call_tool(name, arguments)
+            raise ValueError(f"no order-accuracy service has flagged order {order_id}")
+        return self.clients[0].call_tool(name, arguments)
+
 
 def validate_menu(arguments: dict[str, Any], observations: dict[str, Any]) -> None:
     context = observations["kiosk.get_kiosk_context"]

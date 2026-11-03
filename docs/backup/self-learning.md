@@ -26,7 +26,8 @@ flowchart LR
 
 | Path | Contents | In git |
 |---|---|---|
-| `learning/simulated/kiosk-queue-history.jsonl` | Simulated historic events with the operator's response | Yes (deterministic) |
+| `learning/simulated/kiosk-queue-history.jsonl` | Simulated historic kiosk events with the operator's response | Yes (deterministic) |
+| `learning/simulated/event_op_response.jsonl` | Common synthetic dataset: kiosk + weather + accuracy (`scripts/simulate_service_history.py`); import into a test journal only | Yes (deterministic) |
 | `learning/journal/unlearnt.jsonl` | Records waiting to be learnt: imported simulated history plus live captures | No |
 | `learning/journal/learnt/<run>.jsonl` | Records consumed by an approved run, tagged with the skill hash | No |
 | `learning/runs/<run>.json` | Learner run: service, record IDs, skill hash before, pending write IDs, status | No |

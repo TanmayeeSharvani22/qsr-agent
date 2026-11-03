@@ -168,6 +168,9 @@ def configure_hermes() -> None:
     python = str(ROOT / ".venv/mcp/bin/python")
     for script in sorted((ROOT / "tests/mcp-services").glob("*_server.py")):
         name = script.stem[: -len("_server")].replace("_", "-")
+        # A configured remote service (e.g. order-accuracy-take-away) replaces its local simulation.
+        if any(server == name or server.startswith(name + "-") for server in servers):
+            continue
         servers[name] = {"command": python, "args": [str(script)], "enabled": True}
     enabled_names = [
         name for name, server in servers.items()

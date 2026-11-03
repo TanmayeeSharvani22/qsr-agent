@@ -91,6 +91,7 @@ class PublisherTests(unittest.TestCase):
         self.assertTrue(result["event"]["published"])
         _url, event, headers = post.calls[0]
         self.assertEqual(event["event_type"], "weather_changed")
+        self.assertEqual(event["service"], "weather")
         self.assertEqual(event["store_id"], "qsr-001")
         self.assertTrue(event["data"]["is_raining"])
         self.assertEqual(event["data"]["condition"], "rain")

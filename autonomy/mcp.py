@@ -18,6 +18,21 @@ PROTOCOL_VERSION = "2025-03-26"
 CLIENT_INFO = {"name": "qsr-autonomy", "version": "0.1.0"}
 
 
+def _structured(name: str, result: dict[str, Any]) -> dict[str, Any]:
+    """structuredContent, else JSON text content, else the text itself (services that return text only)."""
+    if result.get("isError"):
+        content = result.get("content") or [{}]
+        raise RuntimeError(f"MCP tool failed: {name}: {content[0].get('text', '')[:300]}")
+    if isinstance(result.get("structuredContent"), dict):
+        return result["structuredContent"]
+    text = "".join(item.get("text", "") for item in result.get("content") or [] if isinstance(item, dict))
+    try:
+        parsed = json.loads(text)
+    except ValueError:
+        parsed = None
+    return parsed if isinstance(parsed, dict) else {"text": text}
+
+
 class HttpMcpClient:
     """Minimal MCP Streamable HTTP client for remote services such as weather."""
 
@@ -29,11 +44,7 @@ class HttpMcpClient:
         self._opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
     def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
-        result = self._request("tools/call", {"name": name, "arguments": arguments or {}})
-        if result.get("isError"):
-            content = result.get("content") or [{}]
-            raise RuntimeError(f"MCP tool failed: {name}: {content[0].get('text', '')[:300]}")
-        return result["structuredContent"]
+        return _structured(name, self._request("tools/call", {"name": name, "arguments": arguments or {}}))
 
     def list_tools(self) -> list[dict[str, Any]]:
         return self._request("tools/list", {})["tools"]
@@ -86,11 +97,7 @@ class StdioMcpClient:
         self._timeout = timeout
 
     def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
-        result = self._request("tools/call", {"name": name, "arguments": arguments or {}})
-        if result.get("isError"):
-            content = result.get("content") or [{}]
-            raise RuntimeError(f"MCP tool failed: {name}: {content[0].get('text', '')[:300]}")
-        return result["structuredContent"]
+        return _structured(name, self._request("tools/call", {"name": name, "arguments": arguments or {}}))
 
     def list_tools(self) -> list[dict[str, Any]]:
         return self._request("tools/list", {})["tools"]

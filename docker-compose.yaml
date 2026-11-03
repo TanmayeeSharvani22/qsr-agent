@@ -117,7 +117,14 @@ services:
       # Remote SAD / Loss Prevention MCP services; empty removes the registration.
       QSR_SAD_MCP_URL: ${QSR_SAD_MCP_URL:-}
       QSR_LP_MCP_URL: ${QSR_LP_MCP_URL:-}
+      # Order Accuracy (Take-away / Dine-in) MCP services; empty removes the registration.
+      QSR_ORDER_ACCURACY_TAKE_AWAY_MCP_URL: ${QSR_ORDER_ACCURACY_TAKE_AWAY_MCP_URL:-}
+      QSR_ORDER_ACCURACY_DINE_IN_MCP_URL: ${QSR_ORDER_ACCURACY_DINE_IN_MCP_URL:-}
+      # Remote Kiosk MCP service; empty keeps the local kiosk simulation.
+      QSR_KIOSK_MCP_URL: ${QSR_KIOSK_MCP_URL:-}
       QSR_DIGITAL_SIGNAGE_MCP_URL: ${QSR_DIGITAL_SIGNAGE_MCP_URL:-https://host.docker.internal:5000/mcp}
+      # Extra event_type=service pairs for producers that omit `service` (learning journal).
+      QSR_EVENT_SERVICES: ${QSR_EVENT_SERVICES:-}
       SAD_TIMEZONE: ${SAD_TIMEZONE:-Asia/Kolkata}
       # Bypass the corporate proxy for loopback, the compose network, and LAN
       # ranges — remote MCP services (e.g. SAD on a 10.x host) are reached direct.

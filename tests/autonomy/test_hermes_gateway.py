@@ -162,7 +162,8 @@ class HermesGatewayTests(unittest.TestCase):
             spec.loader.exec_module(app)
         try:
             with patch.object(app, "operator_gateway", return_value=self.gateway):
-                self.assertEqual(app.ask_hermes("queue?"), {"ok": True, "answer": "Queue is 4."})
+                self.assertEqual(app.ask_hermes("queue?"), {"ok": True, "answer": "Queue is 4.", "tool_calls": [
+                    {"tool": "kiosk.get_context", "arguments": {}}]})
                 self.assertTrue(app.ask_hermes("again?")["ok"])
                 self.assertEqual(FakeGateway.created, 1)
                 # The second turn follows the id Hermes reported after compression.
@@ -174,6 +175,46 @@ class HermesGatewayTests(unittest.TestCase):
                 self.assertEqual(app.ask_hermes("queue?"), {"ok": False, "error": "model unavailable"})
         finally:
             app.AUTONOMY.store.close()
+
+    def test_services_log_operator_responses_into_the_journal(self):
+        config = self.home / "hermes.yaml"
+        # A connected service the agent has no code for (unreachable here, so only its name is known).
+        config.write_text("mcp_servers:\n  edgemart-table-sim-service:\n    url: http://127.0.0.1:9/mcp\n",
+                          encoding="utf-8")
+        environ = {"QSR_AUTONOMY_DB": str(self.home / "state.db"), "QSR_AUTONOMY_MODULES": "",
+                   "QSR_WARMUP": "false", "QSR_LEARNING_DIR": str(self.home / "learning"),
+                   "HERMES_CONFIG": str(config)}
+        with patch.dict("os.environ", environ):
+            spec = importlib.util.spec_from_file_location("qsr_service_response_test", "operator-ui/app.py")
+            app = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(app)
+            event = {"event_id": "oa-1", "event_type": "order_mismatch", "occurred_at": "2026-11-02T10:00:00+00:00",
+                     "data": {"order_id": "A-77", "confidence": 0.95}}
+            remake = {"tool": "accuracy.request_remake", "arguments": {"order_id": "A-77", "reason": "missing fries"}}
+            table = {"event_id": "t-1", "service": "edgemart-table-sim-service", "event_type": "table_dirty",
+                     "occurred_at": "2026-11-02T10:05:00+00:00", "data": {"table_id": "T4"}}
+            cleared = {"tool": "edgemart-table-sim-service.mark_table_cleared", "arguments": {"table_id": "T4"}}
+            try:
+                status, body = app.record_service_response(
+                    {"event": event, "kind": "instruction", "tool_calls": [remake], "response_id": "oa-1-remake"})
+                self.assertEqual((status, body["service"], body["added"]), (201, "accuracy", 1))
+                # Retries with the same response_id are idempotent.
+                self.assertEqual(app.record_service_response(
+                    {"event": event, "tool_calls": [remake], "response_id": "oa-1-remake"})[1]["added"], 0)
+                self.assertEqual(app.record_service_response({"event_id": "missing"})[0], 404)
+                self.assertEqual(app.record_service_response(
+                    {"event": event, "tool_calls": [{"tool": "shell.run", "arguments": {}}]})[0], 400)
+                self.assertEqual(app.record_service_response({"event": event, "kind": "instruction"})[0], 400)
+                # Any connected service journals right away; its reads are not operator responses.
+                self.assertEqual(app.record_service_response(
+                    {"event": table, "tool_calls": [cleared], "response_id": "t-1"})[0], 201)
+                self.assertEqual(app.record_service_response({"event": table, "tool_calls": [
+                    {"tool": "edgemart-table-sim-service.get_tables", "arguments": {}}]})[0], 400)
+                records = app.LEARNING.records()
+                self.assertEqual([(r["event"]["service"], r["link"], r["operator"]["tool_calls"]) for r in records],
+                                 [("accuracy", "service", [remake]), ("edgemart-table-sim-service", "service", [cleared])])
+            finally:
+                app.AUTONOMY.store.close()
 
 
 if __name__ == "__main__":

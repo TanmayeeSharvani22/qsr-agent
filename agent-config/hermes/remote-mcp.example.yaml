@@ -20,6 +20,30 @@ mcp_servers:
     connect_timeout: 15
     timeout: 120
 
+  # Order Accuracy, one MCP server per venue format (streamable-http).
+  order-accuracy-take-away:
+    url: ${QSR_ORDER_ACCURACY_TAKE_AWAY_MCP_URL}
+    transport: streamable-http
+    enabled: true
+    connect_timeout: 15
+    timeout: 120
+
+  order-accuracy-dine-in:
+    url: ${QSR_ORDER_ACCURACY_DINE_IN_MCP_URL}
+    transport: streamable-http
+    enabled: true
+    connect_timeout: 15
+    timeout: 120
+
+  # Kiosk operations (queue, menu, staffing). Named `kiosk` so it replaces the
+  # local simulation (tests/mcp-services/kiosk_server.py) when a URL is set.
+  kiosk:
+    url: ${QSR_KIOSK_MCP_URL}
+    transport: streamable-http
+    enabled: true
+    connect_timeout: 15
+    timeout: 120
+
   # Weather (store-location conditions) from services/weather, run as the compose
   # `weather` service or by setup.sh on the host.
   # QSR_WEATHER_MCP_URL may point at a real-weather deployment; empty removes it.

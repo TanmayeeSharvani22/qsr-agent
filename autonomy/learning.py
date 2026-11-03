@@ -29,6 +29,15 @@ SOURCES = frozenset({"live", "simulated"})
 KINDS = frozenset({"instruction", "approved", "rejected", "none"})
 MAX_TEXT = 1000
 MAX_CONTEXT_CHARS = 4000
+MAX_LIST_ITEMS = 50
+# Producers that omit the top-level `service` (e.g. the voice kiosk and order-accuracy sensors).
+DEFAULT_EVENT_SERVICES = {
+    "queue_count_changed": "kiosk",
+    "weather_changed": "weather",
+    "order_mismatch": "accuracy",
+    "order_mismatch_detected": "accuracy",
+    "station_accuracy_drop": "accuracy",
+}
 
 
 def learning_dir(root: Path) -> Path:
@@ -39,10 +48,20 @@ def _now() -> str:
     return datetime.now(UTC).isoformat()
 
 
+def event_services() -> dict[str, str]:
+    """Event type -> service for envelopes without `service`; extend with QSR_EVENT_SERVICES=type=service,..."""
+    mapping = dict(DEFAULT_EVENT_SERVICES)
+    for pair in os.environ.get("QSR_EVENT_SERVICES", "").split(","):
+        event_type, _, service = (part.strip() for part in pair.partition("="))
+        if EVENT_PATTERN.match(event_type) and SERVICE_PATTERN.match(service):
+            mapping[event_type] = service
+    return mapping
+
+
 def event_service(envelope: dict[str, Any]) -> str:
-    """Service that emitted the event; producers set a top-level ``service``."""
+    """Service that emitted the event: top-level ``service``, else the event type's registered service."""
     data = envelope.get("data") if isinstance(envelope.get("data"), dict) else {}
-    service = envelope.get("service") or data.get("service")
+    service = envelope.get("service") or data.get("service") or event_services().get(str(envelope.get("event_type")))
     return service if isinstance(service, str) and SERVICE_PATTERN.match(service) else "unknown"
 
 
@@ -133,6 +152,17 @@ def chat_record(
         source="live", event=normalize_event(decision["event"]), kind="instruction",
         text=text, reply=reply, tool_calls=tool_calls, proposed=proposal_summary(proposal),
         context=compact_context(decision.get("observations")),
+    )
+
+
+def service_record(
+    envelope: dict[str, Any], kind: str, text: str = "", tool_calls: list[dict[str, Any]] | None = None,
+    context: dict[str, Any] | None = None, record_id: str | None = None,
+) -> dict[str, Any]:
+    """Operator response reported by the service itself, e.g. a remake pressed on its own screen."""
+    return new_record(
+        source="live", event=normalize_event(envelope), kind=kind, text=text, tool_calls=tool_calls or [],
+        context=compact_context(context), link="service", record_id=record_id,
     )
 
 
@@ -354,6 +384,15 @@ def _flatten(value: Any, prefix: str) -> dict[str, Any]:
         for key, item in value.items():
             flat.update(_flatten(item, f"{prefix}.{key}" if prefix else str(key)))
         return flat
+    if isinstance(value, list):
+        # List items with an id are addressable by it, e.g. `menu.items.tea.available`.
+        flat = {}
+        for item in value[:MAX_LIST_ITEMS]:
+            key = item.get("id", item.get("item_id")) if isinstance(item, dict) else None
+            if isinstance(key, str) and EVENT_PATTERN.match(key):
+                rest = {name: field for name, field in item.items() if name not in ("id", "item_id")}
+                flat.update(_flatten(rest, f"{prefix}.{key}"))
+        return flat
     if isinstance(value, (bool, int, float)) or (isinstance(value, str) and len(value) <= 30):
         return {prefix: value}
     return {}
@@ -382,13 +421,23 @@ def section_rules(section: str) -> list[dict[str, Any]]:
     return rules if isinstance(rules, list) else []
 
 
+def _resolve(value: Any, fields: dict[str, Any]) -> Any:
+    """An event-bound argument ``{"from": "event.<field>"}`` takes that field's value."""
+    if isinstance(value, dict) and set(value) == {"from"}:
+        if value["from"] not in fields:
+            raise KeyError(value["from"])
+        return fields[value["from"]]
+    return value
+
+
 def matching_settings(rules: list[dict[str, Any]], fields: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    """Settings of every rule whose conditions hold, merged per tool."""
+    """Settings of every rule whose conditions hold, merged per tool; event-bound values resolved."""
     merged: dict[str, dict[str, Any]] = defaultdict(dict)
     for rule in rules:
         try:
             if _matches(rule, fields):
-                merged[rule["propose"]["tool"]].update(rule["propose"]["set"])
+                settings = {key: _resolve(value, fields) for key, value in rule["propose"]["set"].items()}
+                merged[rule["propose"]["tool"]].update(settings)
         except (KeyError, TypeError):
             continue
     return dict(merged)
@@ -417,7 +466,8 @@ def _responses(record: dict[str, Any]) -> list[str]:
         calls = [record["agent"].get("proposed")] if record["agent"].get("proposed") else []
     changes: list[str] = []
     for call in calls:
-        arguments = {key: value for key, value in (call.get("arguments") or {}).items() if key != "reason"}
+        arguments = {key: _bound(record, value) or value
+                     for key, value in (call.get("arguments") or {}).items() if key != "reason"}
         changes += [f"{call['tool']} {key}={json.dumps(value)}" for key, value in sorted(arguments.items())] \
             or [f"{call['tool']}()"]
     return list(dict.fromkeys(changes)) or ["(no tool call)"]
@@ -460,6 +510,29 @@ RULE_OPS = {
 }
 
 
+def _bound(record: dict[str, Any], value: Any) -> dict[str, str] | None:
+    """``{"from": "event.<field>"}`` when a text argument copies an event field (e.g. an order id)."""
+    if not isinstance(value, str) or len(value) < 3:
+        return None
+    for field, item in _flatten(record["event"].get("payload") or {}, "event").items():
+        if item == value:
+            return {"from": field}
+    return None
+
+
+def _call_changes(record: dict[str, Any], call: dict[str, Any]) -> set[tuple[str, str, str]]:
+    """Literal (tool, argument, json value) changes, plus the event-bound form of copied event values."""
+    changes = set()
+    for key, value in (call.get("arguments") or {}).items():
+        if key == "reason":
+            continue
+        changes.add((call["tool"], key, json.dumps(value)))
+        bound = _bound(record, value)
+        if bound:
+            changes.add((call["tool"], key, json.dumps(bound)))
+    return changes
+
+
 def _changes(record: dict[str, Any]) -> set[tuple[str, str, str]]:
     """(tool, argument, json value) changes the operator made or confirmed."""
     operator = record["operator"]
@@ -469,14 +542,12 @@ def _changes(record: dict[str, Any]) -> set[tuple[str, str, str]]:
         calls = [record["agent"]["proposed"]]
     else:
         calls = []
-    return {(call["tool"], key, json.dumps(value)) for call in calls
-            for key, value in (call.get("arguments") or {}).items() if key != "reason"}
+    return {change for call in calls for change in _call_changes(record, call)}
 
 
 def _rejected(record: dict[str, Any]) -> set[tuple[str, str, str]]:
     proposed = record["agent"].get("proposed") if record["operator"]["kind"] == "rejected" else None
-    return {(proposed["tool"], key, json.dumps(value)) for key, value in (proposed.get("arguments") or {}).items()
-            if key != "reason"} if proposed else set()
+    return _call_changes(record, proposed) if proposed else set()
 
 
 def _condition(fields: dict[str, Any], condition: dict[str, Any]) -> bool:
@@ -798,8 +869,17 @@ def render_skill(service: str, rules: list[dict[str, Any]], tools: list[dict[str
     )
 
 
-_RULE_LINE = re.compile(r"- When (.+?) -> propose (\S+) with (.+?)(?:: (.*?))? "
+_RULE_LINE = re.compile(r"- When (.+?) -> propose (\S+) with (.+) "
                         r"\(taught (\d+)x of (\d+) matching events, rejected (\d+)x\)$")
+
+
+def _pretty_value(value: Any) -> str:
+    """Operator-readable setting: event-bound values and menu item changes in words."""
+    if isinstance(value, dict) and set(value) == {"from"}:
+        return f"the event's {str(value['from']).removeprefix('event.')}"
+    if isinstance(value, list) and value and all(isinstance(item, dict) and "item_id" in item for item in value):
+        return ", ".join(f"{item['item_id']} {'on' if item.get('available') else 'off'}" for item in value)
+    return json.dumps(value)
 
 
 def describe_rules(text: str | None) -> list[dict[str, Any]]:
@@ -807,21 +887,32 @@ def describe_rules(text: str | None) -> list[dict[str, Any]]:
     rules = []
     if not text:
         return rules
-    event = None
+    event, machine = None, []
     for line in text.splitlines():
         heading = re.match(r"##\s*event:\s*(\S+)", line)
         if heading:
             event = heading.group(1)
+            # Lines and the JSON block list rules in the same order; JSON values may contain ": ".
+            machine = section_rules(skill_section(text, event))
             continue
         match = _RULE_LINE.match(line.strip())
         if not match:
             continue
-        when, tool, settings, intent, taught, matched, rejected = match.groups()
+        when, tool, rest, taught, matched, rejected = match.groups()
         when = re.sub(r"context\[[^\]]+\]\.(operations\.)?", "", when).replace("event.", "")
         for raw, pretty in ((">=", "≥"), ("<=", "≤"), ("==", "="), ("!=", "≠"), (" and ", " · ")):
             when = when.replace(raw, pretty)
-        rules.append({"event": event, "when": when, "tool": tool, "then": settings.replace("=", " → ", 1),
-                      "intent": intent or "", "taught": int(taught), "matched": int(matched),
+        index = sum(1 for rule in rules if rule["event"] == event)
+        settings = (machine[index].get("propose") or {}).get("set") if index < len(machine) else None
+        if isinstance(settings, dict) and settings:
+            literal = ", ".join(f"{key}={json.dumps(value)}" for key, value in settings.items())
+            then = ", ".join(f"{key} → {_pretty_value(value)}" for key, value in settings.items())
+            intent = rest[len(literal):].removeprefix(": ") if rest.startswith(literal) else ""
+        else:
+            then, _sep, intent = rest.partition(": ")
+            then = then.replace("=", " → ", 1)
+        rules.append({"event": event, "when": when, "tool": tool, "then": then,
+                      "intent": intent, "taught": int(taught), "matched": int(matched),
                       "rejected": int(rejected)})
     return rules
 
@@ -857,7 +948,10 @@ def learner_prompt(
         "agent combines matching rules itself.",
         "- `when`: all conditions must hold; `when_any`: at least one must hold (optional). Use exact "
         "field names from the summary (for example `event.queue_count` or "
-        "`context[kiosk.get_kiosk_context].operations.kiosk_mode`) and ops >=, <=, >, <, ==, !=.",
+        "`context[kiosk.get_kiosk_context].operations.kiosk_mode`) and ops >=, <=, >, <, ==, !=. List items "
+        "are addressed by their id, for example `context[kiosk.get_kiosk_context].menu.items.tea.available`.",
+        "- To copy a value from the event into an argument (for example an order id), set the argument to "
+        '{"from": "event.<field>"} exactly as the summary shows it.',
         "- Base thresholds on the `typical` ranges; `overall` ranges include noise and one-offs. Add a "
         "context condition on the current value so a rule only fires when the change is needed.",
         f"- Only include changes with at least {min_support} records. Every rule is checked against the "

@@ -87,6 +87,9 @@ The preconfigured entries read their URLs from `.env.example`. Leave
 | `weather` | Store-location weather | `QSR_WEATHER_MCP_URL` |
 | `suspicious-activity` | Kitchen food-safety events | `QSR_SAD_MCP_URL` |
 | `loss-prevention` | Self-checkout loss events | `QSR_LP_MCP_URL` |
+| `order-accuracy-take-away` | Take-away order accuracy (replaces the local simulation) | `QSR_ORDER_ACCURACY_TAKE_AWAY_MCP_URL` |
+| `order-accuracy-dine-in` | Dine-in order accuracy (replaces the local simulation) | `QSR_ORDER_ACCURACY_DINE_IN_MCP_URL` |
+| `kiosk` | Queue, menu, and staffing (replaces the local simulation) | `QSR_KIOSK_MCP_URL` |
 | `digital-signage` | In-store advertising | `QSR_DIGITAL_SIGNAGE_MCP_URL` |
 | `edgemart-sim-service` | Café-day orders, customers, and queue | `EDGEMART_SIM_MCP_URL` |
 | `edgemart-table-sim-service` | Table occupancy and cleaning | `EDGEMART_TABLE_SIM_MCP_URL` |
@@ -104,6 +107,40 @@ service regenerates its certificate, restart the agent.
 Store systems send events to the agent with an HTTP `POST` to
 `http://<agent-host>:8600/autonomy/events`. See the
 [API Reference](../api-reference.md#post-autonomyevents) for the event format.
+
+## Run Kiosk and Order Accuracy on Remote Hosts
+
+The kiosk (smart-kiosk-assistant) and Order Accuracy (take-away, dine-in)
+services provide the MCP tools the agent's built-in `kiosk` and `accuracy`
+capabilities use (`get_kiosk_context`, `change_menu_items`,
+`update_kiosk_settings`, `get_order_accuracy_context`, `request_remake`), and
+push their events to the agent. When a remote URL is set, it replaces the
+local simulation for chat and for event decisions; no local kiosk or
+order-accuracy process runs. With both take-away and dine-in set, the agent
+merges their contexts and sends each remake to the venue that flagged the
+order.
+
+| Host | Settings |
+|---|---|
+| Kiosk | `KIOSK_CORE_QSR_AUTONOMY_EVENTS_URL=http://<agent-host>:8600/autonomy/events`, `KIOSK_CORE_QSR_AUTONOMY_STORE_ID=<QSR_RESTAURANT_ID>`, `KIOSK_CORE_QSR_AUTONOMY_EVENT_TYPES=queue_depth_sample`. MCP on port 8014 |
+| Take-away | `MCP_BIND_HOST=0.0.0.0`, `QSR_AUTONOMY_EVENTS_URL=http://<agent-host>:8600/autonomy/events`, `QSR_AUTONOMY_STORE_ID=<QSR_RESTAURANT_ID>`, `QSR_AUTONOMY_EVENT_TYPES=order_failed`. MCP on port 8010 |
+| Dine-in | Same as take-away. MCP on port 8011 |
+| Agent (`.env.example`) | `QSR_KIOSK_MCP_URL=http://<kiosk-host>:8014/mcp`, `QSR_ORDER_ACCURACY_TAKE_AWAY_MCP_URL=http://<take-away-host>:8010/mcp`, `QSR_ORDER_ACCURACY_DINE_IN_MCP_URL=http://<dine-in-host>:8011/mcp` |
+
+The suggested event types keep the agent from spending a model call on every
+validated order or on its own board changes coming back as events.
+
+- **Start order:** start the services first, then the agent. After restarting
+  a service, run `make restart` so the agent reconnects.
+- **Proxy:** on the service hosts, add the agent host to `NO_PROXY` so events
+  are not sent through the proxy.
+- **Check:** `docker exec <agent-container> grep -A1 -E 'kiosk:|order-accuracy' /home/qsr/.hermes/config.yaml`
+  lists the remote URLs, a chat question such as "What is the kiosk queue?"
+  answers from the remote kiosk, and `GET /autonomy/status` shows each pushed
+  event and its decision.
+- **Security:** `/autonomy/events` and the Order Accuracy MCP ports have no
+  authentication, and the token services send with events is not checked.
+  Keep them on the store network or behind an authenticating proxy.
 
 ## Proxy
 

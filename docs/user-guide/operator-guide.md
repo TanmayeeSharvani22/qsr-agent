@@ -93,6 +93,43 @@ make learn ARGS=pending
 make learn ARGS="approve <id>"
 ```
 
+### Try learning with sample data
+
+To see learning work before you have collected real responses, import the
+synthetic sample history for kiosk, weather and order accuracy
+(`learning/simulated/event_op_response.jsonl`, 517 records marked
+`source: "simulated"`). Use a test deployment only: imported records are added
+to the same journal as real operator responses, so do not import them into a
+production store.
+
+```bash
+docker compose cp learning/simulated/event_op_response.jsonl qsr-agent:/tmp/event_op_response.jsonl
+make learn ARGS="import /tmp/event_op_response.jsonl"
+make learn ARGS=status
+make learn ARGS="run --service kiosk"
+make learn ARGS=pending
+make learn ARGS="approve <id>"
+```
+
+Importing is safe to repeat: records already in the journal are skipped. After
+approval, `learned-<service>/SKILL.md` appears under `learning/skills/` in the
+`learning` volume. To discard a proposal, run `make learn ARGS="reject <id>"`.
+
+The sample file can be regenerated with `python scripts/simulate_service_history.py`.
+
+Notes:
+
+- Learning needs the model server to be running, and takes about a minute.
+- Outside Docker, run `scripts/learn.py` with `QSR_MCP_PYTHON` pointing to a
+  Python that has `fastmcp` installed (the default is `.venv/mcp/bin/python`).
+  Without it the learner cannot read tool schemas and drops its rules.
+- Outside Docker, run `python scripts/learn.py setup` once so the learner
+  profile reads and writes the `learning/skills` folder you intend to use.
+  Use `QSR_LEARNING_DIR` and `QSR_LEARNER_HERMES_HOME` to keep a test run
+  separate from real state.
+- Weather learning has not been reproduced in the container yet. See
+  `docs/self-learning-all-services-report.md`, section K.
+
 ## Command-Line Chat
 
 To chat with the agent in a terminal instead of the browser:
