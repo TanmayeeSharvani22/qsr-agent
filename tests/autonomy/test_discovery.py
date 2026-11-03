@@ -24,6 +24,7 @@ TABLE_TOOLS = [
     {"name": "seat_party", "annotations": {"readOnlyHint": False},
      "inputSchema": {"type": "object", "properties": {"size": {"type": "integer"}}}},
     {"name": "occupancy", "annotations": {"readOnlyHint": True}, "inputSchema": {"type": "object"}},
+    {"name": "describe", "inputSchema": {"type": "object"}},
 ]
 
 
@@ -57,6 +58,7 @@ class DiscoveryTests(unittest.TestCase):
         prefix = "table-occupancy-service."
         self.assertEqual(tools, {
             prefix + "get_tables": (True, ()), prefix + "get_table": (True, ()), prefix + "occupancy": (True, ()),
+            prefix + "describe": (True, ()),
             # Actions require the service's argument-free context reads.
             prefix + "mark_table_cleared": (False, (prefix + "get_tables", prefix + "occupancy")),
             prefix + "seat_party": (False, (prefix + "get_tables", prefix + "occupancy"))})

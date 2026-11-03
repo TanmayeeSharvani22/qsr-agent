@@ -27,14 +27,34 @@ make download-models
 This downloads the model set by `MODEL_ID` in `.env.example` (default
 `OpenVINO/Qwen3-30B-A3B-Instruct-2507-int4-ov`, about 16 GB) into `./models`. The download is skipped if the model is already present.
 
-## Step 3: Start the Agent
+## Step 3: Connect the Kiosk and Order Accuracy Services
+
+Kiosk and order-accuracy data come from the smart-kiosk-assistant and Order
+Accuracy (take-away, dine-in) services on their own hosts. Set their URLs in
+`.env.example` before you start the agent:
+
+```bash
+QSR_KIOSK_MCP_URL=http://<kiosk-host>:8014/mcp
+QSR_ORDER_ACCURACY_TAKE_AWAY_MCP_URL=http://<take-away-host>:8010/mcp
+QSR_ORDER_ACCURACY_DINE_IN_MCP_URL=http://<dine-in-host>:8011/mcp
+QSR_EXTRA_NO_PROXY=<kiosk-host>,<take-away-host>
+```
+
+The service hosts also need settings so their events reach the agent, and all
+hosts need synchronized clocks. See
+[Run Kiosk and Order Accuracy on Remote Hosts](get-started/configuration.md#run-kiosk-and-order-accuracy-on-remote-hosts).
+Without these URLs the agent runs with weather only.
+
+## Step 4: Start the Agent
 
 ```bash
 make up
 ```
 
 `make up` checks Docker, the Intel GPU device, and the model. It then pulls the
-agent image and starts three containers:
+agent image and starts three containers (to run the code you cloned instead of
+the published image, use `make up REGISTRY=false`; see
+[Build from Source](get-started/build-from-source.md)):
 
 | Container | Role |
 |---|---|
@@ -51,7 +71,7 @@ make status
 
 The agent is ready when `qsr-agent` reports `healthy`.
 
-## Step 4: Open the Operator UI
+## Step 5: Open the Operator UI
 
 Open `http://<host>:8600` in a browser, or `http://localhost:8600` on the same
 machine.
@@ -62,7 +82,7 @@ Try a few questions in **Operator Chat**:
 - *What is the current order accuracy rate?*
 - *What's the weather at the store right now?*
 
-## Step 5: Trigger an Event
+## Step 6: Trigger an Event
 
 Change the simulated weather. This also sends a weather event to the agent:
 
@@ -71,9 +91,9 @@ make weather CONDITION=rain TEMP=12
 ```
 
 The event appears in the **Autonomy Decisions** panel, and the agent evaluates
-it. If the
-agent proposes a change, such as adding hot drinks to the menu, select
-**Approve** or **Reject**. See the [Operator Guide](operator-guide.md) for more.
+it. If the agent proposes a change, such as taking cold drinks off the menu,
+select **Approve** or **Reject**. See the [Operator Guide](operator-guide.md)
+for more.
 
 ## Stop the Agent
 

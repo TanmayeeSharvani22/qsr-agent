@@ -25,8 +25,8 @@ sys.path.insert(0, str(ROOT))
 
 from autonomy.learning import Journal, learning_dir  # noqa: E402
 from autonomy.learning_runner import (  # noqa: E402
-    PROFILE, LearnerError, catalog_tools, counts_by_service, decide, finalize, pending_writes, run_service,
-    setup_profile,
+    LEARNER_HOME, PROFILE, LearnerError, catalog_tools, counts_by_service, decide, finalize, pending_writes,
+    run_service, setup_profile,
 )
 
 
@@ -62,6 +62,8 @@ def cmd_run(journal: Journal, args: argparse.Namespace) -> int:
 
     services = [args.service] if args.service else sorted(counts_by_service(journal.records()))
     tools = catalog_tools(build_registry(ROOT).catalog)
+    if not args.dry_run and not (LEARNER_HOME / "config.yaml").is_file():
+        print(setup_profile(journal))
     ran = 0
     for service in services:
         if args.dry_run:

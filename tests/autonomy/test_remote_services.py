@@ -62,7 +62,7 @@ class RemoteServicesTests(unittest.TestCase):
         with self.assertRaises(OSError):
             MergedAccuracyClient([FakeAccuracy(None)]).call_tool("get_order_accuracy_context")
 
-    def test_remote_urls_replace_local_kiosk_and_accuracy_simulations(self):
+    def test_kiosk_and_accuracy_come_only_from_remote_urls(self):
         remote = {"QSR_KIOSK_MCP_URL": "http://kiosk-host:8014/mcp",
                   "QSR_ORDER_ACCURACY_TAKE_AWAY_MCP_URL": "http://oa-host:8010/mcp",
                   "QSR_ORDER_ACCURACY_DINE_IN_MCP_URL": "", "HERMES_CONFIG": "/nonexistent",
@@ -74,6 +74,12 @@ class RemoteServicesTests(unittest.TestCase):
         with patch.dict("os.environ", {**remote, "QSR_ORDER_ACCURACY_DINE_IN_MCP_URL": "http://oa-host:8011/mcp"}):
             catalog = build_registry(ROOT).catalog
         self.assertIsInstance(catalog.tools["accuracy.request_remake"].client, MergedAccuracyClient)
+        # No URL, no capability: nothing stands in for a missing service.
+        with patch.dict("os.environ", {**remote, "QSR_KIOSK_MCP_URL": "",
+                                       "QSR_ORDER_ACCURACY_TAKE_AWAY_MCP_URL": ""}):
+            catalog = build_registry(ROOT).catalog
+        self.assertFalse([name for name in catalog.tools if name.startswith(("kiosk.", "accuracy."))])
+        self.assertFalse({"kiosk-operations", "order-accuracy", "event-menu-decisions"} & set(catalog.skills))
 
 
 if __name__ == "__main__":

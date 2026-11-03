@@ -80,6 +80,11 @@ def operator_response(queue: int, previous: int, wait: int, state: dict, rng: ra
     return (" and ".join(parts), wanted) if wanted else None
 
 
+def queue_status(queue: int) -> str:
+    """The smart-kiosk queue-service label: LOW up to 3, MEDIUM up to 7, else HIGH."""
+    return "LOW" if queue <= 3 else "MEDIUM" if queue <= 7 else "HIGH"
+
+
 def simulate(days: int, seed: int, start: datetime) -> list[dict]:
     rng = random.Random(seed)
     records: list[dict] = []
@@ -88,7 +93,6 @@ def simulate(days: int, seed: int, start: datetime) -> list[dict]:
     for day in range(days):
         state = dict(BASELINE)
         previous = 2
-        staff = rng.randint(6, 9)
         for minute in range(600, 1260, 10):
             queue = queue_curve(minute, rng)
             if queue == previous:
@@ -99,14 +103,21 @@ def simulate(days: int, seed: int, start: datetime) -> list[dict]:
             response = operator_response(queue, previous, wait, state, rng, one_offs < 2)
             text, changes = response or ("", {})
             one_offs += text in {text for _kind, text in ONE_OFFS}
+            nearby = max(0, queue + rng.randint(-2, 2))
+            ref_id = f"sim-{seed}-{counter:05d}"
+            # Same data as kiosk-core's queue_count_changed event.
             event = {
                 "event_id": f"sim-kiosk-{seed}-{counter:05d}", "type": "queue_count_changed",
                 "service": "kiosk", "occurred_at": occurred.isoformat(),
-                "payload": {"queue_count": queue, "previous_queue_count": previous,
-                            "estimated_wait_minutes": wait},
+                "payload": {"count": queue, "nearby": nearby, "status": queue_status(queue),
+                            "estimated_wait_minutes": wait, "source": "smart_kiosk",
+                            "source_event_type": "queue_depth_sample", "ref_id": ref_id,
+                            "queue_count": queue, "previous_queue_count": previous},
             }
-            operations = {**state, "queue_count": queue, "estimated_wait_minutes": wait,
-                          "staff_on_duty": staff, "max_kiosks": MAX_KIOSKS, "baseline_settings": BASELINE}
+            operations = {"status": "open", "queue_available": True, "queue_count": queue,
+                          "queue_status": queue_status(queue), "people_nearby": nearby,
+                          "estimated_wait_minutes": wait, "max_kiosks": MAX_KIOSKS, **state,
+                          "baseline_settings": BASELINE}
             # Events the operator ignored are recorded too: they are the negative evidence.
             records.append(new_record(
                 source="simulated", event=event, kind="instruction" if response else "none", text=text,

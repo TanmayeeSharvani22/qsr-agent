@@ -1,7 +1,7 @@
 # Remote / external MCP services registered with Hermes.
-# setup.sh merges this file, so add real remote endpoints here. Local simulation
-# services are auto-discovered from tests/mcp-services/*_server.py and must NOT
-# be listed here. Put TLS/authentication at a reverse proxy on each service host.
+# setup.sh merges this file, so add real remote endpoints here. A service whose
+# URL is empty is not registered. Put TLS/authentication at a reverse proxy on
+# each service host.
 
 mcp_servers:
   # Suspicious Activity (kitchen food safety). SAD runs its own MCP service via
@@ -35,8 +35,8 @@ mcp_servers:
     connect_timeout: 15
     timeout: 120
 
-  # Kiosk operations (queue, menu, staffing). Named `kiosk` so it replaces the
-  # local simulation (tests/mcp-services/kiosk_server.py) when a URL is set.
+  # Kiosk operations (smart-kiosk-assistant: queue, menu, kiosk settings).
+  # The name `kiosk` is the agent's built-in kiosk capability.
   kiosk:
     url: ${QSR_KIOSK_MCP_URL}
     transport: streamable-http

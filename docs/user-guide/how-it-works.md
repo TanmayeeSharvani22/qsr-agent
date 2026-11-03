@@ -47,10 +47,10 @@ Store event -> queue -> agent gathers context -> no action  (reason shown)
    minutes if nobody acts on it.
 6. On approval, the owning service validates and applies the action.
 
-Order-accuracy remakes are operator-led until the agent has learned when to
-propose them: while the event is shown, tell the agent in chat to remake the
-order. Take-away and dine-in are separate MCP servers, so the agent sends the
-remake to the one named in the event's `data.venue`.
+For an `order_mismatch_detected` event the agent can propose a remake of the
+flagged order (`request_remake`), or the operator can ask for one in chat while
+the event is shown. Take-away and dine-in are separate MCP servers, so the
+remake goes to the one named in the event's `data.venue`.
 
 There is no fixed rule such as "rain means add hot drinks". The agent decides
 from the current context, and the operator stays in control.
@@ -79,16 +79,29 @@ Events without a `service` field are assigned one from their type (for
 example `order_mismatch` → `accuracy`). Add more mappings with
 `QSR_EVENT_SERVICES=table_dirty=table`.
 
-Examples of what can be learned (from `learning/simulated/event_op_response.jsonl`):
+Examples of what can be learned from the sample history
+(`learning/simulated/event_op_response.jsonl`, which uses the same item IDs and
+event fields as the smart-kiosk-assistant and Order Accuracy services):
 
 | Service | Event | Learned rule (example) |
 |---|---|---|
 | Kiosk | `queue_count_changed` | Queue ≥ 10 in standard mode → express; wait ≥ 8 min → open a kiosk; queue ≥ 8 → upsell off; short twice → back to normal |
-| Weather | `weather_changed` | Raining and hot drinks off → hot drinks on; rain stops → hot drinks off; ≥ 29 °C → shake on |
-| Order accuracy | `order_mismatch_detected` | Missing item at the pickup counter with confidence ≥ 0.9 → remake that order (order id taken from the event) |
+| Weather | `weather_changed` | Raining and Cold Coffee (`DRINK-004`) and Fresh Lime Soda (`DRINK-005`) on → both off; rain stops → both back on; ≥ 29 °C and Vanilla Soft Serve (`DESSERT-002`) off → on |
+| Order accuracy | `order_mismatch_detected` | Take-away order with missing items → remake that order (order ID taken from the event); dine-in orders are not remade |
 
-Rules can test list items by id (for example whether `tea` is already on the
-menu) and copy an event value into an argument (for example the order id).
+Rules compare event and context fields with `==`, `!=`, `<`, `<=`, `>`, `>=`.
+List items are addressed by ID (for example
+`context[kiosk.get_kiosk_context].menu.items.DRINK-004.available`), every list
+has a `.count` (for example `event.missing_items.count`), and an argument can
+copy an event value (for example the order ID). Each rule is kept only if the
+records support it: taught at least twice, at least 60% of matching events, and
+rejected less often than taught. When the model's rules miss a consistent group
+of taught records, the learner fits an extra rule from the records, for example
+`event.venue == "dine-in"`.
+
+A learned skill lists when to act. It cannot forbid an action, so the base
+skill may still propose one the operator usually rejects; reject it with a
+reason so the next learning run sees it.
 
 ### Adding a Service (Plug and Play)
 
@@ -124,6 +137,17 @@ All state is kept in Docker volumes on the edge system:
 
 `make down` keeps the volumes. To remove all data as well, run
 `docker compose down -v`.
+
+The repository's `learning/` folder holds only the sample history. Learned
+skills are written to `learning/skills/learned-<service>/SKILL.md` inside the
+`learning` volume, next to the journal (`learning/journal/`) and learning runs
+(`learning/runs/`). To read or back them up:
+
+```bash
+docker compose exec qsr-agent ls /opt/qsr/learning/skills
+docker compose exec qsr-agent cat /opt/qsr/learning/skills/learned-kiosk/SKILL.md
+docker compose cp qsr-agent:/opt/qsr/learning ./learning-export
+```
 
 ## Trust and Safety
 

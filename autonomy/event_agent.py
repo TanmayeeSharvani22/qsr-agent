@@ -276,6 +276,19 @@ class HermesEventAgent:
                 name = self._resolve_tool(action["tool"], selected)
                 if not isinstance(name, str) or name not in self._allowed(selected):
                     raise ValueError("action is not permitted by selected skills")
+                missing = [read for read in self.catalog.tools[name].required_reads if read not in observations]
+                if missing:
+                    # Required context reads are side-effect free, so fetch them rather than reject repeatedly.
+                    for required in missing:
+                        observations[required] = self.catalog.read(required, {})
+                        read_arguments[required] = {}
+                        trace.append({"tool": required, "arguments": {}})
+                    feedback = (
+                        f"The proposed {name} needs live context that had not been read: {', '.join(missing)}. "
+                        "It is now in observations. Reassess the action using it; the previous recommendation "
+                        "has not been accepted."
+                    )
+                    continue
                 learned = self._learned_matches(event, selected, observations).get(name)
                 if learned and isinstance(action["arguments"], dict):
                     # Operator-approved learned settings are applied even when the model omits some.
@@ -294,6 +307,16 @@ class HermesEventAgent:
                     for required in self.catalog.tools[name].required_reads:
                         observations[required] = self.catalog.read(required, read_arguments[required])
                         trace.append({"tool": required, "arguments": read_arguments[required]})
+                    try:
+                        self.catalog.validate_action(name, action["arguments"], observations)
+                    except StaleContextError as error:
+                        services = ", ".join(sorted(self.catalog.tools[name].required_reads))
+                        raise RuntimeError(
+                            f"{services} returned a snapshot that is already stale ({error}); the service host's "
+                            "clock is probably behind the agent's. Synchronize the clocks (NTP)."
+                        ) from error
+                    except ValueError:
+                        pass  # reported to the model on the next round
                     feedback = (
                         "The previous evidence expired during assessment. Required MCP snapshots "
                         "have been refreshed. Reassess the action using these new observations; "

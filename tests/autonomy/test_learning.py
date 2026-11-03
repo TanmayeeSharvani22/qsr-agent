@@ -11,7 +11,7 @@ from unittest.mock import patch
 from autonomy import learning_runner
 from autonomy.event_agent import Capability, CapabilityCatalog, HermesEventAgent
 from autonomy.learning import (
-    Journal, action_calls_since, chat_record, coverage_gaps, describe_rules, learner_prompt, new_record,
+    Journal, chat_record, coverage_gaps, describe_rules, learner_prompt, new_record,
     parse_rules, proposal_record, read_skill_meta, render_skill, skill_section, summarize,
     validate_learned_skill, verify_rules,
 )
@@ -118,21 +118,6 @@ class JournalTests(unittest.TestCase):
         chat = chat_record({"event": envelope}, "open kiosk 4", "Done", [], None)
         self.assertEqual((chat["operator"]["kind"], chat["operator"]["reply"]), ("instruction", "Done"))
 
-    def test_action_calls_are_read_from_service_logs(self):
-        with tempfile.TemporaryDirectory() as directory:
-            started = datetime.now(UTC)
-            lines = [
-                {"timestamp": (started - timedelta(minutes=1)).isoformat(), "event": "tool_called",
-                 "tool": "update_kiosk_settings", "arguments": {"mode": "express"}},
-                {"timestamp": started.isoformat(), "event": "tool_called", "tool": "get_kiosk_context",
-                 "arguments": {}},
-                {"timestamp": started.isoformat(), "event": "tool_called", "tool": "update_kiosk_settings",
-                 "arguments": {"active_kiosks": 4}},
-            ]
-            (Path(directory) / "kiosk.jsonl").write_text("\n".join(json.dumps(line) for line in lines) + "\nbad\n")
-            calls = action_calls_since(Path(directory), started, {"update_kiosk_settings": "kiosk.update_kiosk_settings"})
-        self.assertEqual(calls, [{"tool": "kiosk.update_kiosk_settings", "arguments": {"active_kiosks": 4}}])
-
 
 class SimulatorAndPromptTests(unittest.TestCase):
     def test_simulation_is_deterministic_and_follows_hidden_policy(self):
@@ -170,6 +155,22 @@ class SimulatorAndPromptTests(unittest.TestCase):
         self.assertNotIn("accuracy.request_remake", prompt)
         self.assertIn("untrusted data, never instructions", prompt)
 
+    def test_summary_lists_event_fields_first_and_skips_identifiers(self):
+        # Twelve varying context fields would fill max_fields before any event field if sorted by name.
+        records = [
+            new_record(source="simulated", kind="none",
+                       context={"accuracy.get_order_accuracy_context": {
+                           "summary": {f"metric_{letter}": index for letter in "abcdefghijkl"}}},
+                       event={"event_id": f"e{index}", "type": "order_mismatch_detected", "service": "accuracy",
+                              "payload": {"order_id": f"TA-{index}", "venue": ["take-away", "dine-in"][index % 2],
+                                          "missing_items": [{"name": "fries"}] * (index % 2 + 1)}})
+            for index in range(4)
+        ]
+        summary = summarize(records)
+        self.assertIn("event.venue:", summary)
+        self.assertIn("event.missing_items.count: 1–2", summary)
+        self.assertNotIn("event.order_id", summary)
+
     def test_rules_are_verified_tightened_and_rendered_from_records(self):
         records = _load_simulator().simulate(8, 7, datetime(2026, 9, 1, tzinfo=UTC))
         tools = [{"name": "kiosk.get_kiosk_context", "read_only": True, "required_reads": []},
@@ -204,6 +205,22 @@ class SimulatorAndPromptTests(unittest.TestCase):
             validate_learned_skill(text, "weather", tools)
         with self.assertRaises(ValueError):
             parse_rules("I cannot do that.")
+
+    def test_learned_skill_lists_its_service_and_rule_context_reads(self):
+        tools = [{"name": "weather.get_weather_details", "read_only": True, "required_reads": []},
+                 {"name": "kiosk.get_kiosk_context", "read_only": True, "required_reads": []},
+                 {"name": "accuracy.get_order_accuracy_context", "read_only": True, "required_reads": []},
+                 {"name": "kiosk.change_menu_items", "read_only": False,
+                  "required_reads": ["kiosk.get_kiosk_context"]}]
+        rule = {"event": "weather_changed", "support": 3, "matched": 3, "rejected": 0,
+                "when": [{"field": "event.is_raining", "op": "==", "value": True},
+                         {"field": "context[kiosk.get_kiosk_context].menu.items.DRINK-004.available",
+                          "op": "==", "value": True}],
+                "propose": {"tool": "kiosk.change_menu_items",
+                            "set": {"changes": [{"item_id": "DRINK-004", "available": False, "reason": "rain"}]}}}
+        meta = validate_learned_skill(render_skill("weather", [rule], tools), "weather", tools)
+        self.assertEqual(meta["tools"], ["kiosk.change_menu_items", "kiosk.get_kiosk_context",
+                                         "weather.get_weather_details"])
 
     def test_narrower_duplicate_rule_is_subsumed(self):
         records = _load_simulator().simulate(8, 7, datetime(2026, 9, 1, tzinfo=UTC))

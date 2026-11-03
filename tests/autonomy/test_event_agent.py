@@ -23,6 +23,25 @@ from autonomy.service_capabilities import register_defaults, validate_menu, vali
 from autonomy.store import ProposalStore
 from autonomy.worker import build_controller
 
+# Minimal stdio MCP server (stdlib only): `echo` returns its arguments, `fail` reports a tool error.
+STDIO_ECHO_SERVER = """
+import json, sys
+for line in sys.stdin:
+    message = json.loads(line)
+    if "id" not in message:
+        continue
+    method, params = message["method"], message.get("params") or {}
+    if method == "tools/list":
+        result = {"tools": [{"name": "echo"}]}
+    elif method == "tools/call" and params["name"] == "fail":
+        result = {"isError": True, "content": [{"type": "text", "text": "bad input"}]}
+    elif method == "tools/call":
+        result = {"structuredContent": params.get("arguments") or {}}
+    else:
+        result = {}
+    print(json.dumps({"jsonrpc": "2.0", "id": message["id"], "result": result}), flush=True)
+"""
+
 
 class FakeService:
     def __init__(self):
@@ -291,12 +310,32 @@ class EventAgentTests(unittest.TestCase):
     def test_stale_context_is_refreshed_and_model_reassesses(self):
         runner = ScriptedHermes(self.read, self.action,
                                 {"summary": "Issue resolved in fresh context", "action": None})
-        with patch.object(self.catalog, "validate_action", side_effect=StaleContextError("expired")):
+        with patch.object(self.catalog, "validate_action", side_effect=[StaleContextError("expired"), None]):
             result = HermesEventAgent(runner, self.catalog).evaluate_event(self.event, False)
         self.assertIsNone(result.proposal)
         self.assertEqual(self.service.calls, [("context", {}), ("context", {})])
         self.assertIn("snapshots have been refreshed", runner.prompts[2])
         self.assertEqual(len(result.decision["reads"]), 2)
+
+    def test_missing_required_context_is_read_and_model_reassesses(self):
+        self.catalog.register_tool(Capability("weather.details", "Read weather", self.service, "context", True,
+                                              store_scoped=False))
+        self.catalog.register_skill(Skill("menu", "Weather menu", Path("qsr-skills/order-accuracy/SKILL.md"),
+                                          ("weather.details", "accuracy.context", "accuracy.remake")))
+        runner = ScriptedHermes({"skills": ["menu"], "reads": [{"tool": "weather.details", "arguments": {}}]},
+                                self.action, self.action)
+        evaluation = HermesEventAgent(runner, self.catalog).evaluate_event(self.event, False)
+        self.assertEqual(evaluation.proposal.tool, "accuracy.remake")
+        self.assertIn("needs live context that had not been read: accuracy.context", runner.prompts[2])
+        self.assertEqual([read["tool"] for read in evaluation.decision["reads"]],
+                         ["weather.details", "accuracy.context"])
+
+    def test_snapshot_stale_on_arrival_reports_clock_skew(self):
+        runner = ScriptedHermes(self.read, self.action, self.action)
+        with patch.object(self.catalog, "validate_action", side_effect=StaleContextError("expired")):
+            with self.assertRaisesRegex(RuntimeError, "clock is probably behind"):
+                HermesEventAgent(runner, self.catalog, max_rounds=3).evaluate_event(self.event, False)
+        self.assertEqual(self.service.calls, [("context", {}), ("context", {})])
 
     def test_persistently_stale_context_still_fails_closed(self):
         runner = ScriptedHermes(self.read, self.action, self.action)
@@ -396,6 +435,8 @@ class EventAgentTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary, patch.dict("os.environ", {
             "QSR_AUTONOMY_DB": str(Path(temporary) / "state.db"),
             "QSR_AUTONOMY_MODULES": "",
+            "QSR_KIOSK_MCP_URL": "http://127.0.0.1:9/mcp",
+            "QSR_ORDER_ACCURACY_TAKE_AWAY_MCP_URL": "http://127.0.0.1:9/mcp",
             "QSR_AUTONOMY_DISABLED_TOOLS": "accuracy.get_order_accuracy_context",
             "QSR_AUTONOMY_DISABLED_SKILLS": "event-menu-decisions",
         }):
@@ -582,22 +623,23 @@ class EventAgentTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "unavailable"):
             HttpMcpClient("http://127.0.0.1:9/mcp", timeout=1).list_tools()
 
-    def test_stdio_mcp_client_reads_and_acts_on_fastmcp_service(self):
-        with tempfile.TemporaryDirectory() as directory, patch.dict("os.environ", {
-            "MCP_LOG_DIR": directory, "QSR_KIOSK_STATE": str(Path(directory) / "kiosk.json"),
-        }):
-            client = StdioMcpClient(Path(sys.executable), Path("tests/mcp-services/kiosk_server.py"))
-            self.assertEqual(client.call_tool("get_kiosk_context")["restaurant"]["id"], "qsr-001")
-            result = client.call_tool("change_menu_items", {
-                "changes": [{"item_id": "tea", "available": True, "reason": "Rain"}], "reason": "test"})
-            self.assertEqual((result["executed"], result["gate"]), (True, "automatic"))
-            with self.assertRaisesRegex(RuntimeError, "between one and three"):
-                client.call_tool("change_menu_items", {"changes": [], "reason": "x"})
+    def test_stdio_mcp_client_reads_and_reports_tool_errors(self):
+        with tempfile.TemporaryDirectory() as directory:
+            server = Path(directory) / "echo_server.py"
+            server.write_text(STDIO_ECHO_SERVER, encoding="utf-8")
+            client = StdioMcpClient(Path(sys.executable), server)
+            self.assertEqual(client.list_tools(), [{"name": "echo"}])
+            self.assertEqual(client.call_tool("echo", {"value": 3}), {"value": 3})
+            with self.assertRaisesRegex(RuntimeError, "MCP tool failed: fail: bad input"):
+                client.call_tool("fail")
 
     def test_stdio_mcp_client_times_out(self):
-        client = StdioMcpClient(Path(sys.executable), Path("tests/mcp-services/kiosk_server.py"), timeout=0.01)
-        with self.assertRaisesRegex(RuntimeError, "timed out"):
-            client.call_tool("get_kiosk_context")
+        with tempfile.TemporaryDirectory() as directory:
+            server = Path(directory) / "silent_server.py"
+            server.write_text("import time\ntime.sleep(5)\n", encoding="utf-8")
+            client = StdioMcpClient(Path(sys.executable), server, timeout=0.2)
+            with self.assertRaisesRegex(RuntimeError, "timed out"):
+                client.call_tool("echo")
 
 
 class InputGuardrailTests(unittest.TestCase):

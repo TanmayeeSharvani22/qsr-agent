@@ -183,6 +183,7 @@ class HermesGatewayTests(unittest.TestCase):
                           encoding="utf-8")
         environ = {"QSR_AUTONOMY_DB": str(self.home / "state.db"), "QSR_AUTONOMY_MODULES": "",
                    "QSR_WARMUP": "false", "QSR_LEARNING_DIR": str(self.home / "learning"),
+                   "QSR_ORDER_ACCURACY_TAKE_AWAY_MCP_URL": "http://127.0.0.1:9/mcp",
                    "HERMES_CONFIG": str(config)}
         with patch.dict("os.environ", environ):
             spec = importlib.util.spec_from_file_location("qsr_service_response_test", "operator-ui/app.py")

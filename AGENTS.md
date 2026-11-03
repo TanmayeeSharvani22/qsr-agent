@@ -35,6 +35,7 @@ Skills explain routing and interpretation; they are never sources of live data.
 - Report that an action is simulated whenever a result contains
 	`"placeholder": true`.
 
-The current implementations return placeholder data. Remote deployment may
+Kiosk and Order Accuracy are the remote smart-kiosk-assistant and Order
+Accuracy (take-away, dine-in) services; there are no local substitutes. Deployment may
 change service URLs and transport, but tool names and response contracts must
 remain stable unless the matching skill and integration tests change together.

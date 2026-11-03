@@ -142,29 +142,32 @@ def _fresh(context: dict[str, Any]) -> None:
 
 
 def register_defaults(
-    catalog: CapabilityCatalog, root: Path, kiosk: Any, accuracy: Any, weather: Any | None = None
+    catalog: CapabilityCatalog, root: Path, kiosk: Any | None, accuracy: Any | None, weather: Any | None = None
 ) -> None:
-    catalog.register_tool(Capability(
-        "kiosk.get_kiosk_context", "Read current menu, queue, wait, staffing and demand",
-        kiosk, "get_kiosk_context", True,
-    ))
-    catalog.register_tool(Capability(
-        "kiosk.change_menu_items", "Propose up to three menu availability changes; no prices",
-        kiosk, "change_menu_items", False, ("kiosk.get_kiosk_context",), validate_menu,
-    ))
-    catalog.register_tool(Capability(
-        "kiosk.update_kiosk_settings",
-        "Propose kiosk operating settings: express/standard mode, active kiosks, upsell prompts",
-        kiosk, "update_kiosk_settings", False, ("kiosk.get_kiosk_context",), validate_kiosk_settings,
-    ))
-    catalog.register_tool(Capability(
-        "accuracy.get_order_accuracy_context", "Read accuracy, flagged orders, mismatches and stations",
-        accuracy, "get_order_accuracy_context", True,
-    ))
-    catalog.register_tool(Capability(
-        "accuracy.request_remake", "Propose remaking an exact flagged order",
-        accuracy, "request_remake", False, ("accuracy.get_order_accuracy_context",), validate_remake,
-    ))
+    """Built-in capabilities of the configured services; a skill is registered only when all its tools are."""
+    if kiosk is not None:
+        catalog.register_tool(Capability(
+            "kiosk.get_kiosk_context", "Read current menu, queue, wait, staffing and demand",
+            kiosk, "get_kiosk_context", True,
+        ))
+        catalog.register_tool(Capability(
+            "kiosk.change_menu_items", "Propose up to three menu availability changes; no prices",
+            kiosk, "change_menu_items", False, ("kiosk.get_kiosk_context",), validate_menu,
+        ))
+        catalog.register_tool(Capability(
+            "kiosk.update_kiosk_settings",
+            "Propose kiosk operating settings: express/standard mode, active kiosks, upsell prompts",
+            kiosk, "update_kiosk_settings", False, ("kiosk.get_kiosk_context",), validate_kiosk_settings,
+        ))
+    if accuracy is not None:
+        catalog.register_tool(Capability(
+            "accuracy.get_order_accuracy_context", "Read accuracy, flagged orders, mismatches and stations",
+            accuracy, "get_order_accuracy_context", True,
+        ))
+        catalog.register_tool(Capability(
+            "accuracy.request_remake", "Propose remaking an exact flagged order",
+            accuracy, "request_remake", False, ("accuracy.get_order_accuracy_context",), validate_remake,
+        ))
     weather_reads: tuple[str, ...] = ()
     if weather is not None:
         catalog.register_tool(Capability(
@@ -181,4 +184,5 @@ def register_defaults(
         ("order-accuracy", "Order mismatches, accuracy alerts, station issues and remake recommendations",
          ("accuracy.get_order_accuracy_context", "accuracy.request_remake")),
     ):
-        catalog.register_skill(Skill(name, description, root / "qsr-skills" / name / "SKILL.md", tools))
+        if all(tool in catalog.tools for tool in tools):
+            catalog.register_skill(Skill(name, description, root / "qsr-skills" / name / "SKILL.md", tools))

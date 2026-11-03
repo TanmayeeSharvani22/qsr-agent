@@ -191,27 +191,6 @@ def silent_record(decision: dict[str, Any], proposal: dict[str, Any] | None) -> 
     )
 
 
-def action_calls_since(log_dir: Path, since: datetime, action_tools: dict[str, str]) -> list[dict[str, Any]]:
-    """Action tool calls logged by QsrService MCP servers at or after ``since``."""
-    calls: list[dict[str, Any]] = []
-    for path in sorted(log_dir.glob("*.jsonl")) if log_dir.is_dir() else []:
-        try:
-            with path.open("rb") as handle:
-                handle.seek(max(0, path.stat().st_size - 262144))
-                lines = handle.read().decode("utf-8", "replace").splitlines()
-        except OSError:
-            continue
-        for line in lines:
-            try:
-                entry = json.loads(line)
-                logged = datetime.fromisoformat(entry["timestamp"])
-            except (ValueError, KeyError, TypeError):
-                continue
-            if entry.get("event") == "tool_called" and entry.get("tool") in action_tools and logged >= since:
-                calls.append({"tool": action_tools[entry["tool"]], "arguments": entry.get("arguments") or {}})
-    return calls
-
-
 class Journal:
     """Append-only JSONL of unlearnt records plus per-run archives of learnt ones."""
 
@@ -385,8 +364,9 @@ def _flatten(value: Any, prefix: str) -> dict[str, Any]:
             flat.update(_flatten(item, f"{prefix}.{key}" if prefix else str(key)))
         return flat
     if isinstance(value, list):
-        # List items with an id are addressable by it, e.g. `menu.items.tea.available`.
-        flat = {}
+        # List items with an id are addressable by it, e.g. `menu.items.DRINK-004.available`;
+        # every list also exposes its size, e.g. `event.missing_items.count`.
+        flat = {f"{prefix}.count": len(value)}
         for item in value[:MAX_LIST_ITEMS]:
             key = item.get("id", item.get("item_id")) if isinstance(item, dict) else None
             if isinstance(key, str) and EVENT_PATTERN.match(key):
@@ -484,9 +464,17 @@ def summarize(records: list[dict[str, Any]], max_fields: int = 10) -> str:
         lines.append(f"### event {event_type}: {len(items)} records ("
                      + ", ".join(f"{kind} {count}" for kind, count in sorted(kinds.items())) + ")")
         flat = [_fields(record) for record in items]
-        candidates = [key for key in sorted({key for fields in flat for key in fields})
-                      if sum(key in fields for fields in flat) * 2 >= len(flat)
-                      and len({json.dumps(fields.get(key)) for fields in flat}) > 1][:max_fields]
+        candidates = []
+        # Event fields first; per-record identifiers (order ids, ref ids) explain nothing.
+        for key in sorted({key for fields in flat for key in fields}, key=lambda key: (not key.startswith("event."), key)):
+            values = [fields[key] for fields in flat if key in fields]
+            distinct = {json.dumps(value) for value in values}
+            if len(values) * 2 < len(flat) or len(distinct) < 2:
+                continue
+            if len(values) >= 3 and len(distinct) == len(values) and all(isinstance(v, str) for v in values):
+                continue
+            candidates.append(key)
+        candidates = candidates[:max_fields]
         groups: dict[tuple[str, str], list[int]] = defaultdict(list)
         for index, record in enumerate(items):
             for response in _responses(record):
@@ -607,6 +595,9 @@ def verify_rules(
     for index, rule in enumerate(rules):
         label = f"rule {index + 1}"
         try:
+            # Learned skills store rules per event section without `event`; models copying that omit it.
+            if isinstance(rule, dict) and "event" not in rule and len(by_event) == 1:
+                rule = {**rule, "event": next(iter(by_event))}
             if not isinstance(rule, dict) or rule.get("event") not in by_event:
                 raise ValueError("unknown event")
             propose = rule.get("propose") or {}
@@ -743,6 +734,11 @@ def coverage_gaps(
                                   if isinstance(item, (int, float)) and not isinstance(item, bool)})
                 ranges = "; ".join(f"{name} {_describe([fields[name] for fields in missed if name in fields])}"
                                    for name in numeric)
+                labels = sorted({name for fields in missed for name, item in fields.items()
+                                 if name.startswith("event.") and isinstance(item, (str, bool))
+                                 and len({json.dumps(other.get(name)) for other in missed}) < len(missed)})
+                ranges = "; ".join(filter(None, [ranges] + [
+                    f"{name} {_describe([fields[name] for fields in missed if name in fields])}" for name in labels]))
                 gaps.append(f"{event_type}: {tool} {key}={value} is covered for "
                             f"{len(examples) - len(missed)} of {len(examples)} records; uncovered records have "
                             f"{ranges or 'no numeric fields'}")
@@ -763,18 +759,50 @@ def induce_missing_rules(
             covering = [rule for rule in rules if rule["event"] == event_type and _rule_change(rule) == change]
             hits = sum(change in _changes(record) and any(_matches(rule, fields) for rule in covering)
                        for record, fields in items)
-            if count < min_support or hits >= min_recall * count:
+            if count < min_support or count - hits < min_support:
                 continue
-            tool, key, value = change
-            rule = {"event": event_type, "when": [], "propose": {"tool": tool, "set": {key: json.loads(value)}}}
-            rule = _tighten(rule, change, items, min_support, 0.0) or rule
-            rule = _best_threshold(rule, change, items) or rule
-            texts = Counter(record["operator"]["text"] for record, fields in items
-                            if change in _changes(record) and _matches(rule, fields) and record["operator"]["text"])
-            rule["intent"] = f"operators: {texts.most_common(1)[0][0]}" if texts else ""
-            if rule["when"]:
+            # Sequential covering: each further rule is fitted to the taught records no rule covers yet.
+            for _round in range(3):
+                missed = [(record, fields) for record, fields in items if change in _changes(record)
+                          and not any(_matches(rule, fields) for rule in covering)]
+                if len(missed) < min_support:
+                    break
+                pool = missed + [(record, fields) for record, fields in items if change not in _changes(record)]
+                tool, key, value = change
+                rule = {"event": event_type, "when": [], "propose": {"tool": tool, "set": {key: json.loads(value)}}}
+                rule = (_tighten(rule, change, pool, min_support, 0.0) or _categorical(rule, change, pool, min_support)
+                        or rule)
+                support, _rejected, matched = _stats(rule, change, pool)
+                if not rule["when"] or support / max(matched, 1) < 0.8:
+                    rule = _best_threshold(rule, change, pool) or rule
+                if not rule["when"]:
+                    break
+                texts = Counter(record["operator"]["text"] for record, fields in items
+                                if change in _changes(record) and _matches(rule, fields) and record["operator"]["text"])
+                rule["intent"] = f"operators: {texts.most_common(1)[0][0]}" if texts else ""
                 induced.append(rule)
+                covering.append(rule)
     return induced
+
+
+def _categorical(rule: dict[str, Any], change: tuple[str, str, str],
+                 items: list[tuple[dict[str, Any], dict[str, Any]]], min_support: int,
+                 min_precision: float = 0.8) -> dict[str, Any] | None:
+    """The `field == value` that teaches the most records precisely, when taught records share none."""
+    counts = Counter((key, json.dumps(value)) for record, fields in items if change in _changes(record)
+                     for key, value in fields.items() if isinstance(value, (bool, str, int)))
+    # Ties go to labels every record has (e.g. `event.venue`), not counts only one producer sends.
+    everywhere = set.intersection(*(set(fields) for _record, fields in items)) if items else set()
+    best, best_score = None, None
+    for (key, value), seen in sorted(counts.items()):
+        if seen < min_support:
+            continue
+        candidate = {**rule, "when": [*(rule.get("when") or []), {"field": key, "op": "==", "value": json.loads(value)}]}
+        support, rejected, matched = _stats(candidate, change, items)
+        score = (support, key in everywhere, isinstance(json.loads(value), str), -len(key))
+        if not rejected and support / matched >= min_precision and (best_score is None or score > best_score):
+            best, best_score = candidate, score
+    return best
 
 
 def _best_threshold(rule: dict[str, Any], change: tuple[str, str, str],
@@ -846,6 +874,11 @@ def render_skill(service: str, rules: list[dict[str, Any]], tools: list[dict[str
             if event not in sections and skill_section(existing, event):
                 sections[event] = skill_section(existing, event)
     reads = {read for tool in tools if tool["name"] in used for read in tool.get("required_reads") or ()}
+    # The event's own service and every context a rule checks stay readable when only this skill is selected.
+    known = {tool["name"] for tool in tools}
+    reads |= {tool["name"] for tool in tools if tool.get("read_only") and tool["name"].split(".", 1)[0] == service}
+    reads |= {match.group(1) for rule in rules for item in (rule.get("when") or []) + (rule.get("when_any") or [])
+              if (match := re.match(r"context\[([^\]]+)\]", str(item.get("field")))) and match.group(1) in known}
     listed = sorted(used | reads)
     body = "".join(f"## event: {event}\n{text}\n\n" for event, text in sorted(sections.items()))
     return (
@@ -949,7 +982,8 @@ def learner_prompt(
         "- `when`: all conditions must hold; `when_any`: at least one must hold (optional). Use exact "
         "field names from the summary (for example `event.queue_count` or "
         "`context[kiosk.get_kiosk_context].operations.kiosk_mode`) and ops >=, <=, >, <, ==, !=. List items "
-        "are addressed by their id, for example `context[kiosk.get_kiosk_context].menu.items.tea.available`.",
+        "are addressed by their id, for example `context[kiosk.get_kiosk_context].menu.items.DRINK-004.available`, "
+        "and every list has a `.count`, for example `event.missing_items.count`.",
         "- To copy a value from the event into an argument (for example an order id), set the argument to "
         '{"from": "event.<field>"} exactly as the summary shows it.',
         "- Base thresholds on the `typical` ranges; `overall` ranges include noise and one-offs. Add a "

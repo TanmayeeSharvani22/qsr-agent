@@ -23,6 +23,8 @@ from .mcp import HttpMcpClient, StdioMcpClient
 SERVICE_PREFIXES = {"order-accuracy": "accuracy", "order-accuracy-take-away": "accuracy",
                     "order-accuracy-dine-in": "accuracy"}
 READ_PREFIXES = ("get_", "list_", "read_", "search_", "find_", "fetch_", "query_", "describe_", "check_", "lookup_")
+# Contract tools every QSR service exposes; read-only even without a hint.
+READ_NAMES = {"describe"}
 RETRY_SECONDS = 60.0
 _seen: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
 _failed: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
@@ -50,7 +52,8 @@ def service_prefix(server: str) -> str:
 def is_read(tool: dict[str, Any]) -> bool:
     """MCP `readOnlyHint` when the server sets it, else a get_/list_/... name."""
     hint = (tool.get("annotations") or {}).get("readOnlyHint")
-    return hint if isinstance(hint, bool) else str(tool.get("name", "")).startswith(READ_PREFIXES)
+    name = str(tool.get("name", ""))
+    return hint if isinstance(hint, bool) else name in READ_NAMES or name.startswith(READ_PREFIXES)
 
 
 def _wire(name: str) -> str:
@@ -140,7 +143,7 @@ def discover(catalog: CapabilityCatalog, servers: dict[str, Any],
         tools = [tool for tool in tools if f"{prefix}.{tool['name']}" not in skip]
         reads = [tool for tool in tools if is_read(tool)]
         context = tuple(f"{prefix}.{tool['name']}" for tool in reads
-                        if not (tool.get("inputSchema") or {}).get("required"))
+                        if tool["name"] not in READ_NAMES and not (tool.get("inputSchema") or {}).get("required"))
         acting = _ActionClient(client)
         for tool in tools:
             name, read = f"{prefix}.{tool['name']}", is_read(tool)

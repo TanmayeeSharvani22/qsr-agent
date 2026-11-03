@@ -1,7 +1,7 @@
 # Reusable Hermes runtime settings for this project. Copy required values into
 # ~/.hermes/config.yaml and replace the repository path. MCP endpoints are kept
-# separately because local simulations and production services use different
-# transports and trust boundaries.
+# separately (remote-mcp.example.yaml) because each store's services have their
+# own hosts and trust boundaries.
 #
 # provider: "custom" is Hermes' setting for any OpenAI-compatible endpoint
 # (OVMS, vLLM, llama.cpp, Ollama). OVMS runs without auth, so api_key is a

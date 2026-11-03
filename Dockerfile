@@ -51,11 +51,9 @@ RUN curl -fsSL "$HERMES_INSTALL_URL" -o /tmp/install-hermes.sh \
     && rm /tmp/install-hermes.sh
 
 COPY --chown=qsr:qsr autonomy/requirements.txt /opt/qsr/autonomy/requirements.txt
-COPY --chown=qsr:qsr tests/mcp-services/requirements.txt /opt/qsr/tests/mcp-services/requirements.txt
 RUN python3 -m venv /opt/qsr/.venv/mcp \
     && /opt/qsr/.venv/mcp/bin/python -m pip install --upgrade pip \
     && /opt/qsr/.venv/mcp/bin/python -m pip install \
-    -r /opt/qsr/tests/mcp-services/requirements.txt \
     -r /opt/qsr/autonomy/requirements.txt PyYAML \
     && rm -rf /home/qsr/.cache
 

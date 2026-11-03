@@ -48,7 +48,7 @@ from autonomy.worker import build_controller
 from autonomy.input_guardrail import DECLINE_MESSAGE, build_input_guardrail
 from autonomy.discovery import chat_action_calls, hermes_servers, is_connected_action
 from autonomy.learning import (
-    Journal, action_calls_since, chat_record, describe_rules, learning_dir, proposal_record,
+    Journal, chat_record, describe_rules, learning_dir, proposal_record,
     service_record, silent_record,
 )
 from autonomy import learning_runner
@@ -103,7 +103,6 @@ AUTONOMY = build_controller(_ROOT_PATH)
 INPUT_GUARDRAIL = build_input_guardrail(_ROOT_PATH / "qsr-skills")
 LEARNING = Journal(learning_dir(_ROOT_PATH))
 EVENT_LINK_SECONDS = float(os.environ.get("QSR_EVENT_LINK_MINUTES", "15")) * 60
-MCP_LOG_DIR = Path(os.environ.get("MCP_LOG_DIR", _ROOT_PATH / "tests/mcp-services/logs"))
 LEARN_THRESHOLD = int(os.environ.get("QSR_LEARN_THRESHOLD", "20"))
 LEARN_MIN_EVENT_RECORDS = int(os.environ.get("QSR_LEARN_MIN_EVENT_RECORDS", "5"))
 LEARN_AUTO = os.environ.get("QSR_LEARN_AUTO", "false").strip().lower() in {"1", "true", "yes"}
@@ -165,13 +164,6 @@ def _catalog():
     return getattr(AUTONOMY.event_policies.get("*"), "catalog", None)
 
 
-def _action_tools() -> dict[str, str]:
-    catalog = _catalog()
-    if catalog is None:
-        return {}
-    return {tool.tool: name for name, tool in catalog.tools.items() if not tool.read_only}
-
-
 def _journal(build) -> None:
     """Learning capture must never break the operator flow."""
     try:
@@ -180,8 +172,7 @@ def _journal(build) -> None:
         print(f"[QSR UI] learning journal skipped: {error}", flush=True)
 
 
-def record_chat(decision: dict, question: str, answer: str, started: datetime,
-                hermes_calls: list[dict] | None = None) -> None:
+def record_chat(decision: dict, question: str, answer: str, hermes_calls: list[dict] | None = None) -> None:
     def build() -> dict:
         proposal = None
         if decision.get("proposal_id"):
@@ -189,9 +180,7 @@ def record_chat(decision: dict, question: str, answer: str, started: datetime,
                 proposal = AUTONOMY.store.get(decision["proposal_id"])
             except KeyError:
                 proposal = None
-        # Hermes's own tool calls cover every connected MCP server; server logs only cover local simulations.
-        calls = ((chat_action_calls(hermes_calls or [], _catalog(), hermes_servers()) if _catalog() else [])
-                 or action_calls_since(MCP_LOG_DIR, started, _action_tools()))
+        calls = chat_action_calls(hermes_calls or [], _catalog(), hermes_servers()) if _catalog() else []
         return chat_record(decision, question, answer, calls, proposal)
     _journal(build)
 
@@ -706,11 +695,9 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self._send(200, json.dumps({"ok": True, "answer": DECLINE_MESSAGE}).encode("utf-8"), "application/json")
             return
-        started = datetime.now(UTC)
-
         def after(answer: str, calls: list[dict]) -> None:
             if decision:
-                record_chat(decision, question, answer, started, calls)
+                record_chat(decision, question, answer, calls)
 
         if self.path == "/ask/stream":
             self._stream_answer(prompt, after)

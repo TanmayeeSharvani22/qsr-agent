@@ -49,9 +49,8 @@ WEATHER_HOST=${WEATHER_HOST:-127.0.0.1}
 WEATHER_PORT=${WEATHER_PORT:-8090}
 # Set by start_weather_service; empty disables weather reads in autonomy.
 WEATHER_MCP_URL=""
-# Registrations are convention-based, not per-service code: each QSR sim is a
-# tests/mcp-services/<name>_server.py (auto-discovered), and real apps register
-# themselves via their own launch. This script never changes to add a service.
+# Store services (kiosk, order accuracy, ...) are remote MCP servers configured in
+# agent-config/hermes/remote-mcp.example.yaml. This script never changes to add a service.
 SETUP_PYTHON=python3
 SETUP_PYTHONPATH=
 CHECK_ONLY=false
@@ -92,7 +91,7 @@ Optional environment variables:
   HERMES_INSTALL_URL  Hermes installer URL
     SETUP_VENV          Helper virtual environment path
     SETUP_TARGET        Fallback isolated dependency path
-    MCP_VENV            Venv that launches the sim MCP servers
+    MCP_VENV            Venv for the weather service and autonomy runtime
     START_UI            Auto-start the operator UI after setup (default true)
     WARM_UP_UI          Run one warm-up UI chat request during setup (default false)
     QSR_UI_HOST         Operator UI bind host (default 0.0.0.0)
@@ -221,9 +220,8 @@ ensure_mcp_venv() {
         python3 -m venv "$MCP_VENV" || fail "Could not create $MCP_VENV. Install python3-venv."
     fi
     "$MCP_VENV_PY" -m pip install --quiet --upgrade pip
-    log "Installing FastMCP service, weather service, and autonomy dependencies into $MCP_VENV"
+    log "Installing weather service and autonomy dependencies into $MCP_VENV"
     "$MCP_VENV_PY" -m pip install --quiet --upgrade \
-        -r "$ROOT_DIR/tests/mcp-services/requirements.txt" \
         -r "$ROOT_DIR/autonomy/requirements.txt" \
         -e "$WEATHER_SERVICE_DIR" ||
         fail "Failed to install MCP service dependencies into $MCP_VENV"
@@ -360,8 +358,7 @@ root = Path(os.environ["ROOT_DIR"])
 config_path = Path(os.environ["HERMES_CONFIG"])
 model_id = os.environ["MODEL_ID"]
 ovms_base_url = f"http://127.0.0.1:{os.environ['OVMS_PORT']}/v3"
-# Base config + remote/external service registrations (e.g. SAD). Local sims are
-# auto-discovered below, so they are not listed in any fragment.
+# Base config + remote/external service registrations (kiosk, order accuracy, SAD, ...).
 fragments = [
     root / "agent-config/hermes/config.example.yaml",
     root / "agent-config/hermes/remote-mcp.example.yaml",
@@ -414,27 +411,18 @@ current["model"]["base_url"] = ovms_base_url
 current.setdefault("providers", {}).setdefault("custom", {})
 current["providers"]["custom"]["base_url"] = ovms_base_url
 
-# Auto-register the QSR-owned simulation services by convention: every
-# tests/mcp-services/<name>_server.py becomes an MCP server launched by the MCP
-# venv interpreter. Add a new sim by dropping a *_server.py — no edits here.
-# Entries not managed here (e.g. real apps that self-register via their own
-# `make up`) are preserved because we only touch discovered sim names.
 servers = current.setdefault("mcp_servers", {})
 # Drop remote services whose ${VAR} URL expanded to empty (not configured).
 for name in list(servers):
     entry = servers[name]
     if isinstance(entry, dict) and "command" not in entry and not str(entry.get("url", "")).strip():
         del servers[name]
-venv_py = str(root / ".venv/mcp/bin/python")
-for script in sorted((root / "tests/mcp-services").glob("*_server.py")):
-    name = script.stem[: -len("_server")].replace("_", "-")
-    servers[name] = {"command": venv_py, "args": [str(script)], "enabled": True}
 
 
 # A remote MCP server (one with a `url`) is only enabled if its endpoint is
 # reachable right now. This prevents a stopped/dead service (e.g. SAD not
-# running) from costing an 8s connect-timeout on every agent turn. Local sims
-# use `command` and are spawned on demand, so they are left enabled. Purely
+# running) from costing an 8s connect-timeout on every agent turn. Servers with
+# a `command` are spawned on demand, so they are left enabled. Purely
 # convention-based: no per-service code, and a service comes back online by
 # rerunning setup (or re-enabling it) once its endpoint responds.
 def _endpoint_alive(url: str, timeout: float = 2.0) -> bool:
@@ -454,8 +442,8 @@ for name, spec in servers.items():
         spec["enabled"] = alive
         print(f"[qsr-setup] remote MCP '{name}' {'reachable, enabled' if alive else 'unreachable, disabled'} ({spec['url']})")
 
-# Derive the lean CLI toolset from the ENABLED services only (sims plus any
-# reachable real apps), so Hermes' heavy default preset never bloats the prompt,
+# Derive the lean CLI toolset from the ENABLED services only (reachable remote
+# services), so Hermes' heavy default preset never bloats the prompt,
 # new services are picked up automatically, and disabled/dead remotes are not
 # referenced.
 enabled_servers = [
@@ -655,8 +643,6 @@ validate_stack() {
 
     [[ -x "$MCP_VENV_PY" ]] || ensure_mcp_venv
     log "Running model-independent service tests"
-    PYTHONDONTWRITEBYTECODE=1 "$MCP_VENV_PY" -m unittest discover \
-        -s "$ROOT_DIR/tests/mcp-services" -p 'test_services.py' -v
     PYTHONDONTWRITEBYTECODE=1 "$MCP_VENV_PY" -m unittest discover \
         -s "$WEATHER_SERVICE_DIR/tests"
 }

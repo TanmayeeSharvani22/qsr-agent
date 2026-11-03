@@ -77,10 +77,11 @@ class ServiceHistoryTests(unittest.TestCase):
         records = _load(DATASET)
         weather = [r for r in records if r["event"]["service"] == "weather"]
         accuracy = [r for r in records if r["event"]["service"] == "accuracy"]
-        hot_on = next(c["arguments"]["changes"] for r in weather for c in r["operator"]["tool_calls"]
-                      if c["arguments"]["changes"][0] == {"item_id": "hot-chocolate", "available": True,
-                                                          "reason": "cold or wet weather"})
-        rain = {"event": "weather_changed", "propose": {"tool": "kiosk.change_menu_items", "set": {"changes": hot_on}},
+        cold_off = next(c["arguments"]["changes"] for r in weather for c in r["operator"]["tool_calls"]
+                        if c["arguments"]["changes"][0] == {"item_id": "DRINK-004", "available": False,
+                                                            "reason": "cold or wet weather"}
+                        and len(c["arguments"]["changes"]) == 2)
+        rain = {"event": "weather_changed", "propose": {"tool": "kiosk.change_menu_items", "set": {"changes": cold_off}},
                 "when": [{"field": "event.is_raining", "op": "==", "value": True},
                          {"field": "event.previous.is_raining", "op": "==", "value": False}]}
         accepted, dropped = verify_rules([rain], weather, TOOLS)
@@ -88,37 +89,65 @@ class ServiceHistoryTests(unittest.TestCase):
         self.assertGreaterEqual(accepted[0]["support"], 5)
         remake = {"event": "order_mismatch_detected", "propose": {"tool": "accuracy.request_remake",
                                                          "set": {"order_id": "SIM-1001"}},
-                  "when": [{"field": "event.confidence", "op": ">=", "value": 0.9}]}
+                  "when": [{"field": "event.venue", "op": "==", "value": "take-away"}]}
         self.assertEqual(verify_rules([remake], accuracy, TOOLS)[0], [])
 
     def test_menu_state_and_event_bound_arguments_make_weather_and_accuracy_learnable(self):
         records = _load(DATASET)
         weather = [r for r in records if r["event"]["service"] == "weather"]
         accuracy = [r for r in records if r["event"]["service"] == "accuracy"]
-        # Menu list items are addressable by id, so "only if not already on" can be expressed.
+        # Menu list items are addressable by their real kiosk id, so "only if not already off" can be expressed.
         fields = event_fields(weather[0]["event"]["payload"], weather[0]["context"])
-        self.assertIn("context[kiosk.get_kiosk_context].menu.items.hot-chocolate.available", fields)
+        self.assertIn("context[kiosk.get_kiosk_context].menu.items.DRINK-004.available", fields)
         induced = induce_missing_rules([], weather)
         accepted, _dropped = verify_rules(induced, weather, TOOLS)
-        self.assertTrue(any("hot-chocolate" in json.dumps(rule["propose"]) and rule["support"] >= 5
+        self.assertTrue(any("DRINK-004" in json.dumps(rule["propose"]) and rule["support"] >= 5
                             for rule in accepted))
-        # The remake copies the order id from the event.
+        # The remake copies the order id from the event; only take-away orders with missing items are remade.
         remake = {"event": "order_mismatch_detected", "propose": {"tool": "accuracy.request_remake",
                                                          "set": {"order_id": {"from": "event.order_id"}}},
-                  "when": [{"field": "event.confidence", "op": ">=", "value": 0.9}]}
+                  "when": [{"field": "event.venue", "op": "==", "value": "take-away"},
+                           {"field": "event.missing_items.count", "op": ">=", "value": 1}]}
         accepted, dropped = verify_rules([remake], accuracy, TOOLS)
         self.assertEqual(len(accepted), 1, dropped)
-        settings = matching_settings(accepted, {"event.order_id": "SIM-4242", "event.confidence": 0.95,
-                                                "event.station_type": "pickup_counter",
-                                                "event.issue_type": "missing_item"})
-        self.assertEqual(settings, {"accuracy.request_remake": {"order_id": "SIM-4242"}})
-        self.assertEqual(matching_settings(accepted, {"event.confidence": 0.95}), {})  # nothing to bind
+        self.assertEqual(accepted[0]["rejected"], 0)
+        # A rule copied from a learned skill's JSON block has no `event`; one event type makes it unambiguous.
+        without_event = {key: value for key, value in remake.items() if key != "event"}
+        self.assertEqual(verify_rules([without_event], accuracy, TOOLS)[0][0]["event"], "order_mismatch_detected")
+        live = event_fields({"order_id": "TA-4242", "venue": "take-away", "reason": "missing:1",
+                             "missing_items": [{"name": "french fries", "quantity": 1}], "extra_items": []}, {})
+        self.assertEqual(matching_settings(accepted, live), {"accuracy.request_remake": {"order_id": "TA-4242"}})
+        self.assertEqual(matching_settings(accepted, {**live, "event.venue": "dine-in"}), {})
+        self.assertEqual(matching_settings(accepted, {"event.venue": "take-away",
+                                                      "event.missing_items.count": 1}), {})  # nothing to bind
         described = describe_rules(render_skill("accuracy", accepted, TOOLS))
         self.assertEqual(described[0]["then"], "order_id → the event's order_id")
-        hot_on = [rule for rule in verify_rules(induce_missing_rules([], weather), weather, TOOLS)[0]
-                  if '"available": true' in json.dumps(rule["propose"])]
-        self.assertIn("hot-chocolate on", " ".join(rule["then"] for rule in describe_rules(
-            render_skill("weather", hot_on, TOOLS))))
+        cold_on = [rule for rule in verify_rules(induce_missing_rules([], weather), weather, TOOLS)[0]
+                   if '"available": true' in json.dumps(rule["propose"])]
+        self.assertIn("DRINK-004 on", " ".join(rule["then"] for rule in describe_rules(
+            render_skill("weather", cold_on, TOOLS))))
+
+    def test_induction_learns_a_label_rule_and_a_smaller_second_pattern(self):
+        # Live-test policy: dine-in remade; take-away remade only with 2 missing items, else rejected.
+        records = []
+        for index, (venue, missing, kind) in enumerate(
+                [("dine-in", 1, "approved")] * 6 + [("take-away", 2, "approved")] * 3
+                + [("take-away", 1, "rejected")] * 5):
+            order_id = f"O-{index}"
+            payload = {"order_id": order_id, "venue": venue, "reason": f"missing:{missing}",
+                       "missing_items": [{"name": "item"}] * missing, "extra_items": [],
+                       **({"accuracy_score": 0.62, "quantity_mismatches": []} if venue == "dine-in"
+                          else {"quantity_mismatch": []})}
+            proposed = {"tool": "accuracy.request_remake", "arguments": {"order_id": order_id, "reason": "x"},
+                        "status": "executed" if kind == "approved" else "rejected"}
+            records.append(new_record(source="live", kind=kind, proposed=proposed, event={
+                "event_id": f"e{index}", "type": "order_mismatch_detected", "service": "accuracy",
+                "payload": payload}))
+        accepted, dropped = verify_rules(induce_missing_rules([], records), records, TOOLS)
+        self.assertEqual(len(accepted), 2, dropped)
+        self.assertIn([{"field": "event.venue", "op": "==", "value": "dine-in"}], [rule["when"] for rule in accepted])
+        self.assertEqual(sorted((rule["support"], rule["matched"], rule["rejected"]) for rule in accepted),
+                         [(3, 3, 0), (6, 6, 0)])
 
     def test_weather_envelope_service_and_malformed_or_sparse_records(self):
         self.assertEqual(event_service({"event_type": "weather_changed", "service": "weather", "data": {}}), "weather")
