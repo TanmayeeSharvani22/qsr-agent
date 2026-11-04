@@ -3,7 +3,7 @@
 ## Start-Up
 
 | Symptom | Resolution |
-|---|---|
+| --- | --- |
 | `No Intel render device found at /dev/dri/render*` | Install the Intel GPU driver and confirm `ls /dev/dri/renderD*` lists a device. |
 | `Model missing: .../config.json` | Run `make download-models`, or set `MODEL_ROOT` and `MODEL_ID` to an existing model. |
 | `Docker daemon is not available to this user` | Add your user to the `docker` group, then log out and back in. |
@@ -16,7 +16,7 @@
 ## Store Services
 
 | Symptom | Resolution |
-|---|---|
+| --- | --- |
 | A service shows as unavailable in **Connected apps** | Confirm the service is running and its URL is reachable from the agent container. Use `host.docker.internal`, not `127.0.0.1`, for services on the same machine. |
 | A remote service is unreachable behind a proxy | Add the service host to `QSR_EXTRA_NO_PROXY` in `.env.example`, then run `make up`. |
 | An HTTPS service fails after it restarted | The service may have generated a new certificate. Run `make restart`. |
@@ -29,7 +29,7 @@
 ## Chat and Decisions
 
 | Symptom | Resolution |
-|---|---|
+| --- | --- |
 | A store question is declined as out of scope | Rephrase it using store terms such as menu, queue, order, table, or kitchen. Confirm the related service is connected. |
 | The answer says data is unavailable | The service that owns the data is not reachable. Check **Connected apps**. |
 | An answer takes longer than usual | Long conversations are occasionally summarised to fit the model's context. Select **New chat** to start fresh. |
@@ -41,7 +41,7 @@
 ## Learning
 
 | Symptom | Resolution |
-|---|---|
+| --- | --- |
 | **Learn now** does not appear | The UI needs 20 responses for the service and 5 for one event type. `make learn ARGS=status` shows the counts; `make learn ARGS=run` needs only the 5. |
 | `Nothing to learn` or `no proposed rule is supported by the records` | Collect more varied responses. A rule needs at least two taught records and must not be rejected as often as taught. |
 | A learned rule refers to fields or item IDs your services don't have | It was learned from data for different services. Delete `learning/skills/learned-<service>` in the `learning` volume and learn again from your own records. |

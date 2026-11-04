@@ -5,7 +5,7 @@
 ## Components
 
 | Component | Role |
-|---|---|
+| --- | --- |
 | Operator UI | Web interface for chat, connected-service status, decisions, approvals, and learning. Also receives events from store systems. |
 | Agent runtime (Hermes) | Understands the request, picks the relevant store skills, calls store services, and composes the answer. Keeps operator preferences in memory. |
 | OpenVINO™ Model Server | Serves the Qwen3 INT4 language model set by `MODEL_ID` on the Intel® GPU through an OpenAI-compatible API. |
@@ -109,7 +109,7 @@ the event type with `QSR_EVENT_SERVICES`). Tools listed in
 All state is kept in Docker volumes on the edge system:
 
 | Volume | Contents |
-|---|---|
+| --- | --- |
 | `autonomy-state` | Event queue, decisions, and approvals |
 | `learning` | Operator response history, learned guidance, and agent memory |
 | `weather-state` | Current simulated weather |

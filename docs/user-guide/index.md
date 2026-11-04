@@ -1,5 +1,16 @@
 # QSR Store Agent
 
+<!--hide_directive
+<div class="component_card_widget">
+  <a class="icon_github" href="https://github.com/intel-retail/qsr-agent/tree/main/">
+     GitHub
+  </a>
+  <a class="icon_document" href="https://github.com/intel-retail/qsr-agent/blob/main/README.md">
+     Readme
+  </a>
+</div>
+hide_directive-->
+
 The QSR Store Agent is an AI operations assistant for quick-service restaurants
 (QSR). It runs entirely on an Intel® edge system in the store. Restaurant staff
 ask questions in plain language and get answers built from live store data. The
@@ -10,12 +21,10 @@ changes.
 Inference runs locally with the OpenVINO™ Model Server on an Intel® GPU, so
 store data, conversations, and decisions never leave the premises.
 
-![QSR Store Agent architecture](_assets/architecture.svg)
-
 ## What It Does
 
 | Capability | Description |
-|---|---|
+| --- | --- |
 | Operator chat | Ask about queues, wait times, menu availability, order accuracy, kitchen safety, tables, footfall, signage, and weather. Answers come from the connected store services, not from the model's memory. |
 | Event-driven recommendations | Store systems post events to the agent. The agent gathers the relevant live context and either proposes an action or explains why no action is needed. |
 | Human approval | Every proposed action waits for an operator to approve or reject it in the UI. Nothing changes in the store without approval. |
@@ -45,13 +54,36 @@ store data, conversations, and decisions never leave the premises.
 
 ## Documentation
 
-- [Get Started](get-started.md): install and run the agent.
-  - [System Requirements](get-started/system-requirements.md)
-  - [Configuration](get-started/configuration.md)
-  - [Build from Source](get-started/build-from-source.md)
-- [How It Works](how-it-works.md): architecture and data flow.
-- [Operator Guide](operator-guide.md): use the chat, approve decisions, and
+- [Get Started](./get-started.md): install and run the agent.
+  - [System Requirements](./get-started/system-requirements.md)
+  - [Configuration](./get-started/configuration.md): set environment variables and connect services.
+  - [Build from Source](./get-started/build-from-source.md): compile the agent locally.
+- [How It Works](./how-it-works.md): architecture and data flow.
+- [Operator Guide](./operator-guide.md): use the chat, approve decisions, and
   teach the agent.
-- [API Reference](api-reference.md): HTTP endpoints of the operator UI.
-- [Troubleshooting](troubleshooting.md)
-- [Release Notes](release-notes.md)
+- [API Reference](./api-reference.md): HTTP endpoints of the operator UI.
+- [Troubleshooting](./troubleshooting.md)
+- [Release Notes](./release-notes.md)
+
+## Supported Use Cases
+
+For details of the supported use cases, see these pages:
+
+- [Digital Signage](https://docs.openedgeplatform.intel.com/dev/edge-ai-suites/ai-suite-retail/digital-signage/index.html)
+- [Loss Prevention](https://docs.openedgeplatform.intel.com/dev/edge-ai-suites/ai-suite-retail/loss-prevention/index.html)
+- [Order Accuracy](https://docs.openedgeplatform.intel.com/dev/edge-ai-suites/ai-suite-retail/order-accuracy/index.html)
+- [Smart Kiosk Assistant](https://docs.openedgeplatform.intel.com/dev/edge-ai-suites/ai-suite-retail/voice-enabled-interactions/smart-kiosk-assistant/index.html)
+
+<!--hide_directive
+:::{toctree}
+:hidden:
+
+./get-started.md
+./how-it-works.md
+./operator-guide.md
+./api-reference.md
+./troubleshooting.md
+Release Notes <./release-notes.md>
+
+:::
+hide_directive-->

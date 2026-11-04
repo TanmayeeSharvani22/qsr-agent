@@ -3,7 +3,7 @@
 Open the operator UI at `http://<host>:8600`. The screen has four areas:
 
 | Area | Use it to |
-|---|---|
+| --- | --- |
 | **Connected apps** | See which store services the agent can reach and how many tools each one offers |
 | **Operator Chat** | Ask questions and give instructions |
 | **Autonomy Decisions** | Review events, read the agent's reasoning, and approve or reject proposals |
@@ -36,7 +36,7 @@ When a store event arrives, it appears in **Autonomy Decisions** with one of
 these states:
 
 | State | Meaning |
-|---|---|
+| --- | --- |
 | Queued / Processing | The agent is evaluating the event |
 | Pending | The agent proposes an action and is waiting for you |
 | No action | The agent decided no change is needed and explains why |
@@ -129,7 +129,7 @@ Notes:
 - Learning needs the model server to be running, and takes about a minute.
 - Outside Docker, run `scripts/learn.py` with `QSR_MCP_PYTHON` pointing to a
   Python that has `fastmcp` installed (the default is `.venv/mcp/bin/python`).
-  Without it the learner cannot read tool schemas and drops its rules.
+  Without it, the learner cannot read tool schemas and drops its rules.
 - Outside Docker, run `python scripts/learn.py setup` once so the learner
   profile reads and writes the `learning/skills` folder you intend to use.
   Use `QSR_LEARNING_DIR` and `QSR_LEARNER_HERMES_HOME` to keep a test run

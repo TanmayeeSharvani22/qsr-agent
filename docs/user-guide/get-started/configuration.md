@@ -6,14 +6,14 @@ Edit `.env.example` in the repository root. Every `make up` copies it to `.env`,
 so changes made directly to `.env` are overwritten.
 
 | What you changed | Apply with |
-|---|---|
+| --- | --- |
 | `.env.example` | `make up` |
 | `agent-config/hermes/*.yaml` or `qsr-skills/` | `make restart` |
 
 ## Settings You Must Change
 
 | Where | Setting | Why |
-|---|---|---|
+| --- | --- | --- |
 | Agent `.env.example` | Service URLs, for example `QSR_KIOSK_MCP_URL` | Empty means the agent has no data from that service |
 | Agent `.env.example` | `QSR_EXTRA_NO_PROXY` (behind a proxy) | Lists the service hosts so the agent reaches them directly |
 | Agent `.env.example` | `MODEL_ROOT`, `MODEL_ID` (if not the defaults) | Must point at a downloaded model, or `make up` stops |
@@ -26,7 +26,7 @@ See [Connect Store Services](#connect-store-services) and
 ## Main Settings
 
 | Variable | Default | Description |
-|---|---|---|
+| --- | --- | --- |
 | `MODEL_ROOT` | `./models` | Host directory that holds downloaded models |
 | `MODEL_ID` | `OpenVINO/Qwen3-30B-A3B-Instruct-2507-int4-ov` | Model served by the OpenVINO™ Model Server. Use an OpenVINO™ model with tool-calling support, for example `OpenVINO/Qwen3-8B-int4-ov`. After changing it, run `make download-models` and `make up` |
 | `QSR_UI_HOST` | `0.0.0.0` | Interface the operator UI listens on. Use `127.0.0.1` for local-only access |
@@ -39,7 +39,7 @@ See [Connect Store Services](#connect-store-services) and
 ## Image Source
 
 | Variable | Default | Description |
-|---|---|---|
+| --- | --- | --- |
 | `REGISTRY` | `true` | `true` pulls the published image; `false` builds it locally |
 | `REGISTRY_URL` | `intel/` | Registry and namespace prefix |
 | `TAG` | `latest` | Image tag |
@@ -49,7 +49,7 @@ make up                                            # pull intel/qsr-agent:latest
 make up REGISTRY_URL=myreg.io/team/ TAG=2026.2.0   # custom registry and tag
 ```
 
-To build locally, see [Build from Source](build-from-source.md).
+To build locally, see [Build from Source](./build-from-source.md).
 
 ## Weather
 
@@ -65,8 +65,9 @@ WEATHER_LOCATION_NAME=My Restaurant
 WEATHER_STORE_ID=qsr-001
 ```
 
-Open-Meteo's free API is for non-commercial use. Commercial deployments need a
-paid key or a self-hosted instance.
+> [!IMPORTANT]
+> Open-Meteo's free API is for non-commercial use. Commercial deployments need a
+  paid key or a self-hosted instance.
 
 ## Connect Store Services
 
@@ -96,7 +97,7 @@ The preconfigured entries read their URLs from `.env.example`. Leave a URL
 empty to skip that service:
 
 | Service | Purpose | Setting |
-|---|---|---|
+| --- | --- | --- |
 | `weather` | Store-location weather | `QSR_WEATHER_MCP_URL` |
 | `suspicious-activity` | Kitchen food-safety events | `QSR_SAD_MCP_URL` |
 | `loss-prevention` | Self-checkout loss events | `QSR_LP_MCP_URL` |

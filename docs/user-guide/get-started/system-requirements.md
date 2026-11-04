@@ -3,7 +3,7 @@
 ## Hardware
 
 | Component | Requirement |
-|---|---|
+| --- | --- |
 | Processor | Intel® Core™ Ultra, Intel® Core™, or Intel® Xeon® processor (x86-64) |
 | GPU | Intel® GPU (integrated or Intel® Arc™ discrete) exposed at `/dev/dri/renderD*` |
 | Memory | At least 64 GB for mixture-of-experts (MoE) models such as Qwen3-30B-A3B (the default); check the OpenVINO™ defaults and the model card for the model you choose. At least 32 GB for Qwen3-8B or a similar dense model. Integrated GPUs share this system memory for the model weights and the 4 GB KV cache |
@@ -12,7 +12,7 @@
 ## Software
 
 | Component | Requirement |
-|---|---|
+| --- | --- |
 | Operating system | Linux x86-64 with Intel GPU drivers installed |
 | Docker | Docker Engine with the Compose v2 plugin, usable by the current user without `sudo` |
 | Tools | Git, `make`, `curl`, Python 3 (used by the model download script) |
@@ -43,12 +43,12 @@ sudo usermod -aG docker "$USER"
 ## Network Ports
 
 | Port | Service | Default binding |
-|---|---|---|
+| --- | --- | --- |
 | 8600 | Operator UI and event webhook | All interfaces (`0.0.0.0`) |
 | 4444 | OpenVINO™ Model Server API | Loopback only |
 | 8090 | Weather service | Loopback only |
 
-Change ports and bindings in [Configuration](configuration.md).
+See how to change ports and bindings in [Configuration](./configuration.md).
 
 ---
 
