@@ -40,13 +40,8 @@ store data, conversations, and decisions never leave the premises.
 - The OpenVINO™ Model Server configuration for the local language model.
 - A weather service that can simulate conditions for demos or report live
   weather.
-- Connections to the smart-kiosk-assistant and Order Accuracy (take-away,
-  dine-in) services on their own hosts, including their events and learning.
-- Connection settings for other store services, such as kitchen safety, digital
-  signage, and EdgeMart table and footfall simulators, when they are deployed.
-
-> Kiosk and order-accuracy data come only from those services; there is no
-> built-in substitute. Weather is simulated unless live weather is configured.
+- Connection settings for store services, such as kiosk, order accuracy,
+  kitchen safety, and digital signage, that run on their own hosts.
 
 ## Documentation
 

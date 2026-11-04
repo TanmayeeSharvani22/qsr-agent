@@ -345,5 +345,5 @@ the remote URLs for `kiosk`, `order-accuracy-take-away`, and `order-accuracy-din
 | order-accuracy | `take-away/src/core/agent_contract.py`, `dine-in/src/agent_contract.py` (new), `mcp_sensor.py` and `mcp_service.py` in both apps, both READMEs, both API references, tests |
 | smart-kiosk-assistant | `kiosk_core/qsr_mcp/agent_tools.py` (new), `kiosk_core/qsr_mcp/{mcp_service,autonomy,board_state}.py`, `kiosk_core/config.py`, `kiosk_core/ordering/service.py`, `docker-compose.yml`, `docs/qsr-mcp.md`, tests |
 
-See [Configuration](user-guide/get-started/configuration.md#run-kiosk-and-order-accuracy-on-remote-hosts)
+See [Configuration](user-guide/get-started/configuration.md#connect-store-services)
 for the deployment settings.

@@ -14,19 +14,15 @@ GPU, so store data never leaves the premises.
 
 Requires Linux, an Intel® GPU, and Docker. See
 [System Requirements](docs/user-guide/get-started/system-requirements.md).
-Kiosk and order-accuracy data come from the smart-kiosk-assistant and Order
-Accuracy (take-away, dine-in) services on their own hosts; set them up first
-([Run Kiosk and Order Accuracy on Remote Hosts](docs/user-guide/get-started/configuration.md#run-kiosk-and-order-accuracy-on-remote-hosts)).
+Store data comes from store services on their own hosts
+([Connect Store Services](docs/user-guide/get-started/configuration.md#connect-store-services)).
 
 ```bash
 git clone https://github.com/intel-retail/qsr-agent.git
 cd qsr-agent
 make download-models
-# Edit .env.example (make up copies it to .env) and set:
-#   QSR_KIOSK_MCP_URL=http://<kiosk-host>:8014/mcp
-#   QSR_ORDER_ACCURACY_TAKE_AWAY_MCP_URL=http://<take-away-host>:8010/mcp
-#   QSR_ORDER_ACCURACY_DINE_IN_MCP_URL=http://<dine-in-host>:8011/mcp
-#   QSR_EXTRA_NO_PROXY=<kiosk-host>,<take-away-host>   # behind a proxy
+# Edit .env.example (make up copies it to .env) and set the store service URLs,
+# for example QSR_KIOSK_MCP_URL=http://<kiosk-host>:<port>/mcp
 make up
 ```
 

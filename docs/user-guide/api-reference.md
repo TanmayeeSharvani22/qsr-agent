@@ -86,7 +86,7 @@ evaluation runs in the background.
 | `service` | string | No | Name of the producing service, used to learn from operator responses. If missing, it is taken from `event_type` (built-in types, or `QSR_EVENT_SERVICES`) |
 | `store_id` | string | No | Store identifier. If set, must equal the agent's `QSR_RESTAURANT_ID` (default `qsr-001`) |
 | `occurred_at` | string | No | ISO 8601 timestamp |
-| `data` | object | No | Event details. When several MCP servers back one service, `data.venue` names the one that owns the event (for example `take-away` or `dine-in` for order accuracy); chat actions on the event go to that server |
+| `data` | object | No | Event details. When several MCP servers back one service, `data.venue` names the server that owns the event; chat actions on the event go to that server |
 
 The whole event must be under 32 KiB.
 
@@ -145,8 +145,9 @@ Approves or rejects learned rules that are waiting for review.
 
 ### `POST /learning/responses`
 
-Records an operator response that a service observed itself, for example a
-remake started on the order-accuracy screen. Returns `201` with the record ID.
+Records an operator response that a service observed itself, for example an
+action the operator took on the service's own screen. Returns `201` with the
+record ID.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
@@ -164,8 +165,8 @@ An `instruction` needs `text` or `tool_calls`. Returns `404` for an unknown
 curl -X POST http://localhost:8600/learning/responses \
   -H 'Content-Type: application/json' \
   -d '{
-    "event_id": "oa-0001",
-    "tool_calls": [{"tool": "accuracy.request_remake", "arguments": {"order_id": "A-77"}}],
-    "response_id": "oa-0001-remake"
+    "event_id": "evt-0001",
+    "tool_calls": [{"tool": "<service>.<action>", "arguments": {}}],
+    "response_id": "evt-0001-response"
   }'
 ```

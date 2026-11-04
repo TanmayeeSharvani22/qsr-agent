@@ -61,13 +61,8 @@ make weather CONDITION=rain TEMP=12
 make weather CONDITION=clear NO_EVENT=1    # change silently, no event
 ```
 
-Queue events come from the kiosk itself: kiosk-core sends one whenever the
-count from its queue camera changes. Order-accuracy events come from the
-take-away and dine-in services when an order fails validation. See
-[Run Kiosk and Order Accuracy on Remote Hosts](get-started/configuration.md#run-kiosk-and-order-accuracy-on-remote-hosts)
-for a test event you can send from each host.
-
-Any store system can send its own events. See the
+Other events come from the connected store services themselves. Any store
+system can send events; see the
 [API Reference](api-reference.md#post-autonomyevents).
 
 ## Teach the Agent
@@ -100,27 +95,16 @@ survive `make restart`, `make up` and image rebuilds.
 ### Try learning with sample data
 
 To see learning work before you have collected real responses, import the
-synthetic sample history for kiosk, weather and order accuracy
-(`learning/simulated/event_op_response.jsonl`, 520 records marked
+synthetic sample history (`learning/simulated/event_op_response.jsonl`, marked
 `source: "simulated"`). Use a test deployment only: imported records are added
 to the same journal as real operator responses, so do not import them into a
 production store.
-
-The sample records use the same menu item IDs, event fields and context as the
-smart-kiosk-assistant and Order Accuracy (take-away, dine-in) services, so the
-learned rules work with those services:
-
-| Service | Learned behaviour |
-|---|---|
-| Weather | Rain: Cold Coffee (`DRINK-004`) and Fresh Lime Soda (`DRINK-005`) off. Rain stops: both back on. 29 °C or more: Vanilla Soft Serve (`DESSERT-002`) on |
-| Order accuracy | Take-away order with missing items: remake it. Dine-in orders are not remade |
-| Kiosk | Long queue: express mode, a fourth kiosk and no upsell. Queue cleared: back to standard |
 
 ```bash
 docker compose cp learning/simulated/event_op_response.jsonl qsr-agent:/tmp/event_op_response.jsonl
 make learn ARGS="import /tmp/event_op_response.jsonl"
 make learn ARGS=status
-make learn ARGS="run --service kiosk"
+make learn ARGS="run --service <service>"
 make learn ARGS=pending
 make learn ARGS="approve <id>"
 ```
@@ -135,7 +119,7 @@ To learn again from scratch for one service, for example after importing new
 sample data, delete its learned skill first (test deployments only):
 
 ```bash
-docker compose exec qsr-agent rm -rf /opt/qsr/learning/skills/learned-weather
+docker compose exec qsr-agent rm -rf /opt/qsr/learning/skills/learned-<service>
 ```
 
 The sample file can be regenerated with `python scripts/simulate_service_history.py`.

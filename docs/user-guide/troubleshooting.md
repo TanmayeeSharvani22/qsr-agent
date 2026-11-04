@@ -23,8 +23,7 @@
 | Changes to `agent-config/` or `qsr-skills/` are ignored | Run `make restart`. |
 | A remote service stops answering after it restarted | The agent keeps its MCP session. Run `make restart`. |
 | A remote service is reachable again but still shows as unavailable | After repeated failures the agent parks the connection and retries every five minutes. Run `make restart` to reconnect now. If its port accepts connections but MCP requests time out, restart the service on its host. |
-| A remote kiosk or Order Accuracy service shows fewer tools than expected (kiosk 13, Order Accuracy 6) | The service runs a version without the agent contract (`get_kiosk_context`, `get_order_accuracy_context`, `request_remake`). Update the service. |
-| No events arrive from a remote service | On the service host, check `*_AUTONOMY_EVENTS_URL` points to `http://<agent-host>:8600/autonomy/events`, the store ID is `qsr-001`, and the agent host is in `NO_PROXY`. Run `docker exec <container> env \| grep AUTONOMY`. |
+| No events arrive from a remote service | On the service host, check its event URL points to `http://<agent-host>:8600/autonomy/events`, its store ID matches the agent's (`qsr-001`), and the agent host bypasses its proxy. |
 | Events from one host fail with a clock-skew or "evidence expired" error | That host's clock is behind the agent's. Enable NTP on every host (`timedatectl`), for example with your network's time server. |
 
 ## Chat and Decisions
@@ -38,7 +37,6 @@
 | An event shows **Failed** | Check `make logs`, then resend the event with the same `event_id` to retry it. |
 | Approve returns an error | The proposal expired after five minutes or was already decided. |
 | The weather event does nothing | Use a valid condition (`clear`, `cloudy`, `fog`, `drizzle`, `rain`, `storm`, `snow`), and don't pass `NO_EVENT=1`. |
-| Kiosk or order-accuracy questions say the data is unavailable | `QSR_KIOSK_MCP_URL` or the Order Accuracy URLs are not set, or the service is down. There is no local substitute; see [Run Kiosk and Order Accuracy on Remote Hosts](get-started/configuration.md#run-kiosk-and-order-accuracy-on-remote-hosts). |
 
 ## Learning
 

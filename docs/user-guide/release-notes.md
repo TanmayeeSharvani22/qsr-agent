@@ -17,42 +17,26 @@
   signage, café operations, table management, and footfall analytics.
 - Single-command deployment with Docker Compose, using a pre-built image or a
   local build.
-- Kiosk and order accuracy come from the remote smart-kiosk-assistant and
-  Order Accuracy (take-away, dine-in) services; their events drive decisions
-  and learning. The built-in kiosk and order-accuracy simulations and
-  `make queue` are removed.
-- Learning from live events of remote services: list sizes (`.count`), menu
-  items by ID, and extra rules fitted from the records for patterns the model
-  misses.
+- Store data comes only from the connected store services; the built-in
+  simulations, except weather, are removed.
+- Learning from the live events of any connected service.
 
 ### Fixed
 
 - `make learn ARGS=run` on a fresh install creates the learner profile itself.
-- The sample learning history uses the real kiosk menu IDs and Order Accuracy
-  event fields, so its rules work with the remote services.
 - A learned skill can read its own service and every context its rules check.
 - A service snapshot that is already stale when read now fails with a clock-skew
   message instead of five retries.
-- When the model proposes an action without reading the context it requires
-  (for example a menu change without the kiosk snapshot), the agent reads it
-  and asks the model to reassess, instead of failing after five rounds.
-- The kiosk skill uses the real kiosk tools (`change_menu_items`,
-  `update_menu_item`, queue history, order stats, board state, menu requests)
-  and fields.
-- Learned rules waiting for review survive container restarts and rebuilds;
-  approving after `make restart` no longer fails with "unknown pending skill
-  write".
-- `make learn` trusts the self-signed certificates of remote services, so
-  learning can read services such as digital signage.
+- When the model proposes an action without reading the context it requires,
+  the agent reads it and asks the model to reassess, instead of failing after
+  five rounds.
+- Learned rules waiting for review survive container restarts and rebuilds.
+- `make learn` trusts the self-signed certificates of remote services.
 - Learning no longer adds a rule from only two records that the other rules
   miss.
-- Operator chat loads the store skill before answering, so "back to normal"
-  restores the kiosk settings instead of changing the board mode.
-- Order accuracy answers for "last N minutes" list only orders inside that
-  window.
-- Table answers report dirty episodes as episodes, not tables; busy-hour
-  answers no longer pass invalid dates to the footfall service.
-- `compare_*` and `tail_*` service tools are classified as reads.
+- Operator chat loads the matching store skill before it answers or acts.
+- Store skills use the current tools and fields of their services, and answer
+  time-window and count questions correctly.
 
 ### Known Limitations
 

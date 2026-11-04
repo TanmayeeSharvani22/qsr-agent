@@ -27,23 +27,18 @@ make download-models
 This downloads the model set by `MODEL_ID` in `.env.example` (default
 `OpenVINO/Qwen3-30B-A3B-Instruct-2507-int4-ov`, about 16 GB) into `./models`. The download is skipped if the model is already present.
 
-## Step 3: Connect the Kiosk and Order Accuracy Services
+## Step 3: Connect Store Services
 
-Kiosk and order-accuracy data come from the smart-kiosk-assistant and Order
-Accuracy (take-away, dine-in) services on their own hosts. Set their URLs in
-`.env.example` before you start the agent:
+Store data comes from the store services, which run on their own hosts. Set
+their MCP URLs in `.env.example` before you start the agent, for example:
 
 ```bash
-QSR_KIOSK_MCP_URL=http://<kiosk-host>:8014/mcp
-QSR_ORDER_ACCURACY_TAKE_AWAY_MCP_URL=http://<take-away-host>:8010/mcp
-QSR_ORDER_ACCURACY_DINE_IN_MCP_URL=http://<dine-in-host>:8011/mcp
-QSR_EXTRA_NO_PROXY=<kiosk-host>,<take-away-host>
+QSR_KIOSK_MCP_URL=http://<kiosk-host>:<port>/mcp
+QSR_EXTRA_NO_PROXY=<kiosk-host>
 ```
 
-The service hosts also need settings so their events reach the agent, and all
-hosts need synchronized clocks. See
-[Run Kiosk and Order Accuracy on Remote Hosts](get-started/configuration.md#run-kiosk-and-order-accuracy-on-remote-hosts).
-Without these URLs the agent runs with weather only.
+See [Connect Store Services](get-started/configuration.md#connect-store-services).
+Without service URLs the agent runs with weather only.
 
 ## Step 4: Start the Agent
 
