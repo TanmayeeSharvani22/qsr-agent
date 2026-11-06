@@ -29,7 +29,7 @@ make build REGISTRY=false
 
 | Variable | Description |
 | --- | --- |
-| `TAG` | Tag for the built images (default `latest`) |
+| `TAG` | Tag for the built images (default `2026.3.0-rc1`) |
 | `REGISTRY_URL` | Image name prefix (default `intel/`) |
 | `HERMES_INSTALL_COMMIT` | Pin the agent-runtime installer to a specific revision for reproducible builds |
 

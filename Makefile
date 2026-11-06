@@ -5,7 +5,7 @@ OVMS_PORT ?= 4444
 QSR_UI_PORT ?= 8600
 QSR_UI_HOST ?= 0.0.0.0
 # Image source: REGISTRY=true (default) pulls the pre-built image; REGISTRY=false builds from source.
-TAG ?= latest
+TAG ?= 2026.3.0-rc1
 REGISTRY ?= true
 REGISTRY_URL ?= intel/
 QSR_IMAGE ?= $(REGISTRY_URL)qsr-agent:$(TAG)
@@ -17,7 +17,7 @@ HOST_GID ?= $(shell id -g)
 WEATHER_PORT ?= 8090
 RENDER_DEVICE ?= $(firstword $(wildcard /dev/dri/renderD*))
 RENDER_GID ?= $(shell if [ -n "$(RENDER_DEVICE)" ]; then stat -c '%g' "$(RENDER_DEVICE)"; else echo 992; fi)
-TAG ?= latest
+TAG ?= 2026.3.0-rc1
 
 export MODEL_ROOT MODEL_ID OVMS_PORT QSR_UI_PORT QSR_UI_HOST
 export HERMES_INSTALL_COMMIT QSR_IMAGE WEATHER_IMAGE TAG

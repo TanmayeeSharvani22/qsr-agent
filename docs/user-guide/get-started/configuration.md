@@ -42,10 +42,10 @@ See [Connect Store Services](#connect-store-services) and
 | --- | --- | --- |
 | `REGISTRY` | `true` | `true` pulls the published image; `false` builds it locally |
 | `REGISTRY_URL` | `intel/` | Registry and namespace prefix |
-| `TAG` | `latest` | Image tag |
+| `TAG` | `2026.3.0-rc1` | Image tag |
 
 ```bash
-make up                                            # pull intel/qsr-agent:latest
+make up                                            # pull intel/qsr-agent:2026.3.0-rc1
 make up REGISTRY_URL=myreg.io/team/ TAG=2026.2.0   # custom registry and tag
 ```
 
